@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from src.api.dependencies import require_country_access
-from src.database.postgres.schema.audit_schema import AuditCheckpointResultSchema, AuditSchema
+from src.database.postgres.schema.audit_schema import AuditSchema
 from src.database.postgres.schema.facility_schema import FacilitySchema
 from src.database.postgres.schema.zone_schema import ZoneSchema
 from src.database.repositories.schemas.dashboard_schema import (

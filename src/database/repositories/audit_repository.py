@@ -3,16 +3,23 @@ from uuid import uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.orm import selectinload
 
-from src.database.postgres.schema.audit_schema import AuditCheckpointResultSchema, AuditSchema
+from src.database.postgres.schema.audit_schema import (
+    AuditCheckpointCategorySchema,
+    AuditCheckpointSchema,
+    AuditSchema,
+)
 from src.database.postgres.schema.facility_schema import FacilitySchema
 from src.database.postgres.schema.zone_schema import ZoneSchema
 from src.database.repositories.base_repository import BasePostgresRepository
 from src.database.repositories.schemas.audit_schema import (
+    AuditCheckpointCategoryResponse,
+    AuditCheckpointResponse,
     AuditCreate,
+    AuditDetailResponse,
+    AuditProgressResponse,
     AuditResponse,
-    CheckpointResultCreate,
-    CheckpointResultResponse,
 )
 
 
@@ -23,19 +30,58 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
     def _schema_to_audit(self, row: AuditSchema) -> AuditResponse:
         return AuditResponse.model_validate(row)
 
+    def _schema_to_detail(self, row: AuditSchema) -> AuditDetailResponse:
+        checkpoints = []
+        for acp in row.audit_checkpoints:
+            cats = [AuditCheckpointCategoryResponse.model_validate(c) for c in acp.categories]
+            checkpoints.append(AuditCheckpointResponse(
+                id=acp.id,
+                audit_id=acp.audit_id,
+                checkpoint_id=acp.checkpoint_id,
+                checkpoint_name=acp.checkpoint_name,
+                image_url=acp.image_url,
+                status_type=acp.status_type,
+                created_at=acp.created_at,
+                categories=cats,
+            ))
+        return AuditDetailResponse(
+            id=row.id,
+            facility_id=row.facility_id,
+            shift_type=row.shift_type,
+            shift_date=row.shift_date,
+            status_type=row.status_type,
+            created_by=row.created_by,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            finalized_at=row.finalized_at,
+            audit_checkpoints=checkpoints,
+        )
+
     async def get_by_id(self, id: str) -> AuditResponse | None:
         row = await self._get_by_id_raw(id)
         return self._schema_to_audit(row) if row else None
 
-    async def get_audit_schema_by_id(self, id: str) -> AuditSchema | None:
-        return await self._get_by_id_raw(id)
+    async def get_detail(self, id: str) -> AuditDetailResponse | None:
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(AuditSchema)
+                .options(
+                    selectinload(AuditSchema.audit_checkpoints)
+                    .selectinload(AuditCheckpointSchema.categories)
+                )
+                .where(AuditSchema.id == id)
+            )
+            row = result.scalar_one_or_none()
+        if not row:
+            return None
+        return self._schema_to_detail(row)
 
     async def find_by_facility_shift_date(
         self,
         facility_id: str,
         shift_type: str,
         shift_date: date,
-    ) -> AuditSchema | None:
+    ) -> AuditResponse | None:
         async with self._session_factory() as session:
             result = await session.execute(
                 select(AuditSchema).where(
@@ -44,7 +90,8 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
                     AuditSchema.shift_date == shift_date,
                 )
             )
-            return result.scalar_one_or_none()
+            row = result.scalar_one_or_none()
+        return self._schema_to_audit(row) if row else None
 
     async def list_audits(
         self,
@@ -100,125 +147,212 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
             rows = result.scalars().all()
         return [self._schema_to_audit(r) for r in rows], total
 
-    async def create(self, data: AuditCreate, created_by: str, status_type: str = "IN_PROGRESS") -> AuditResponse:
+    async def create_with_snapshot(
+        self,
+        data: AuditCreate,
+        created_by: str,
+        checkpoints_with_categories: list[dict],
+    ) -> AuditDetailResponse:
+        """Create audit + snapshot all checkpoints and their categories in a single transaction."""
         async with self._session_factory() as session:
-            row = AuditSchema(
-                id=str(uuid4()),
+            audit_id = str(uuid4())
+            audit = AuditSchema(
+                id=audit_id,
                 facility_id=data.facility_id,
                 shift_type=data.shift_type,
                 shift_date=data.shift_date,
-                status_type=status_type,
+                status_type="PENDING",
                 created_by=created_by,
             )
-            session.add(row)
+            session.add(audit)
+            for cp in checkpoints_with_categories:
+                acp_id = str(uuid4())
+                acp = AuditCheckpointSchema(
+                    id=acp_id,
+                    audit_id=audit_id,
+                    checkpoint_id=cp["checkpoint_id"],
+                    checkpoint_name=cp["checkpoint_name"],
+                    image_url=cp["image_url"],
+                    status_type="PENDING",
+                )
+                session.add(acp)
+                for cat in cp.get("categories", []):
+                    acc = AuditCheckpointCategorySchema(
+                        id=str(uuid4()),
+                        audit_checkpoint_id=acp_id,
+                        category_id=cat["category_id"],
+                        category_name=cat["category_name"],
+                        is_completed=False,
+                    )
+                    session.add(acc)
             await session.commit()
-            await session.refresh(row)
-            return self._schema_to_audit(row)
+            result = await session.execute(
+                select(AuditSchema)
+                .options(
+                    selectinload(AuditSchema.audit_checkpoints)
+                    .selectinload(AuditCheckpointSchema.categories)
+                )
+                .where(AuditSchema.id == audit_id)
+            )
+            row = result.scalar_one()
+        return self._schema_to_detail(row)
 
-    async def finalize(self, id: str, finalized_at: datetime) -> AuditResponse | None:
+    async def update_status(self, id: str, status_type: str, finalized_at: datetime | None = None) -> AuditResponse | None:
         async with self._session_factory() as session:
             result = await session.execute(select(AuditSchema).where(AuditSchema.id == id))
             row = result.scalar_one_or_none()
             if not row:
                 return None
-            row.status_type = "FINALIZED"
+            row.status_type = status_type
             row.finalized_at = finalized_at
             await session.commit()
             await session.refresh(row)
             return self._schema_to_audit(row)
 
-    async def reopen(self, id: str) -> AuditResponse | None:
+    async def get_progress(self, id: str) -> AuditProgressResponse | None:
         async with self._session_factory() as session:
-            result = await session.execute(select(AuditSchema).where(AuditSchema.id == id))
+            result = await session.execute(
+                select(AuditSchema)
+                .options(
+                    selectinload(AuditSchema.audit_checkpoints)
+                    .selectinload(AuditCheckpointSchema.categories)
+                )
+                .where(AuditSchema.id == id)
+            )
             row = result.scalar_one_or_none()
             if not row:
                 return None
-            row.status_type = "IN_PROGRESS"
-            row.finalized_at = None
-            await session.commit()
-            await session.refresh(row)
-            return self._schema_to_audit(row)
+            total_cp = len(row.audit_checkpoints)
+            completed_cp = sum(1 for cp in row.audit_checkpoints if cp.status_type == "COMPLETED")
+            total_cat = sum(len(cp.categories) for cp in row.audit_checkpoints)
+            completed_cat = sum(
+                1 for cp in row.audit_checkpoints for c in cp.categories if c.is_completed
+            )
+            pct = (completed_cat / total_cat * 100.0) if total_cat > 0 else 0.0
+        return AuditProgressResponse(
+            audit_id=row.id,
+            status_type=row.status_type,
+            total_checkpoints=total_cp,
+            completed_checkpoints=completed_cp,
+            total_categories=total_cat,
+            completed_categories=completed_cat,
+            completion_percentage=round(pct, 2),
+        )
 
 
-class AuditCheckpointResultRepository:
+class AuditCheckpointCategoryRepository:
+    """Handles completion of individual audit checkpoint categories."""
+
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
 
-    def _schema_to_result(self, row: AuditCheckpointResultSchema) -> CheckpointResultResponse:
-        return CheckpointResultResponse.model_validate(row)
-
-    async def get_or_create_result(
-        self,
-        audit_id: str,
-        checkpoint_id: str,
-        data: CheckpointResultCreate,
-    ) -> CheckpointResultResponse:
+    async def get_by_id(self, id: str) -> AuditCheckpointCategoryResponse | None:
         async with self._session_factory() as session:
             result = await session.execute(
-                select(AuditCheckpointResultSchema).where(
-                    AuditCheckpointResultSchema.audit_id == audit_id,
-                    AuditCheckpointResultSchema.checkpoint_id == checkpoint_id,
-                )
+                select(AuditCheckpointCategorySchema).where(AuditCheckpointCategorySchema.id == id)
             )
             row = result.scalar_one_or_none()
-            if row:
-                row.compliant = data.compliant
-                row.manual_override = data.manual_override
-                if data.image_path is not None:
-                    row.image_path = data.image_path
-                if data.ai_status_type is not None:
-                    row.ai_status_type = data.ai_status_type
-                if data.ai_result is not None:
-                    row.ai_result = data.ai_result
-                await session.commit()
-                await session.refresh(row)
-                return self._schema_to_result(row)
-            row = AuditCheckpointResultSchema(
-                id=str(uuid4()),
-                audit_id=audit_id,
-                checkpoint_id=checkpoint_id,
-                compliant=data.compliant,
-                manual_override=data.manual_override,
-                image_path=data.image_path,
-                ai_status_type=data.ai_status_type,
-                ai_result=data.ai_result,
-            )
-            session.add(row)
-            await session.commit()
-            await session.refresh(row)
-            return self._schema_to_result(row)
+        return AuditCheckpointCategoryResponse.model_validate(row) if row else None
 
-    async def update_ai_status(
-        self,
-        audit_id: str,
-        checkpoint_id: str,
-        ai_status_type: str,
-        ai_result: str | None = None,
-    ) -> CheckpointResultResponse | None:
+    async def get_with_checkpoint(self, id: str) -> tuple[AuditCheckpointCategorySchema | None, AuditCheckpointSchema | None]:
+        """Return both the category row and its parent checkpoint (for status computation)."""
         async with self._session_factory() as session:
             result = await session.execute(
-                select(AuditCheckpointResultSchema).where(
-                    AuditCheckpointResultSchema.audit_id == audit_id,
-                    AuditCheckpointResultSchema.checkpoint_id == checkpoint_id,
+                select(AuditCheckpointCategorySchema)
+                .options(
+                    selectinload(AuditCheckpointCategorySchema.audit_checkpoint)
+                    .selectinload(AuditCheckpointSchema.categories)
                 )
+                .where(AuditCheckpointCategorySchema.id == id)
+            )
+            cat_row = result.scalar_one_or_none()
+            if not cat_row:
+                return None, None
+            return cat_row, cat_row.audit_checkpoint
+
+    async def mark_complete(
+        self,
+        id: str,
+        completed_by: str,
+        completed_at: datetime,
+        remarks: str | None = None,
+    ) -> AuditCheckpointCategoryResponse | None:
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(AuditCheckpointCategorySchema).where(AuditCheckpointCategorySchema.id == id)
             )
             row = result.scalar_one_or_none()
             if not row:
                 return None
-            row.ai_status_type = ai_status_type
-            if ai_result is not None:
-                row.ai_result = ai_result
+            row.is_completed = True
+            row.completed_by = completed_by
+            row.completed_at = completed_at
+            if remarks is not None:
+                row.remarks = remarks
             await session.commit()
             await session.refresh(row)
-            return self._schema_to_result(row)
+            return AuditCheckpointCategoryResponse.model_validate(row)
 
-    async def get_result(self, audit_id: str, checkpoint_id: str) -> CheckpointResultResponse | None:
+    async def mark_uncomplete(self, id: str) -> AuditCheckpointCategoryResponse | None:
         async with self._session_factory() as session:
             result = await session.execute(
-                select(AuditCheckpointResultSchema).where(
-                    AuditCheckpointResultSchema.audit_id == audit_id,
-                    AuditCheckpointResultSchema.checkpoint_id == checkpoint_id,
-                )
+                select(AuditCheckpointCategorySchema).where(AuditCheckpointCategorySchema.id == id)
             )
             row = result.scalar_one_or_none()
-            return self._schema_to_result(row) if row else None
+            if not row:
+                return None
+            row.is_completed = False
+            row.completed_by = None
+            row.completed_at = None
+            row.remarks = None
+            await session.commit()
+            await session.refresh(row)
+            return AuditCheckpointCategoryResponse.model_validate(row)
+
+    async def update_checkpoint_status(self, audit_checkpoint_id: str) -> str:
+        """Recompute checkpoint status based on its categories. Returns new status."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(AuditCheckpointSchema)
+                .options(selectinload(AuditCheckpointSchema.categories))
+                .where(AuditCheckpointSchema.id == audit_checkpoint_id)
+            )
+            cp = result.scalar_one_or_none()
+            if not cp:
+                return "PENDING"
+            all_done = all(c.is_completed for c in cp.categories) if cp.categories else False
+            new_status = "COMPLETED" if all_done else "PENDING"
+            if cp.status_type != new_status:
+                cp.status_type = new_status
+                await session.commit()
+            return new_status
+
+    async def recompute_audit_status(self, audit_id: str) -> str:
+        """Recompute audit status based on all checkpoints. Returns new status."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(AuditSchema)
+                .options(selectinload(AuditSchema.audit_checkpoints))
+                .where(AuditSchema.id == audit_id)
+            )
+            audit = result.scalar_one_or_none()
+            if not audit:
+                return "PENDING"
+            if audit.status_type == "FINALIZED":
+                return "FINALIZED"
+            cps = audit.audit_checkpoints
+            if not cps:
+                return audit.status_type
+            completed = sum(1 for cp in cps if cp.status_type == "COMPLETED")
+            if completed == 0:
+                new_status = "PENDING"
+            elif completed == len(cps):
+                new_status = "COMPLETED"
+            else:
+                new_status = "IN_PROGRESS"
+            if audit.status_type == "REOPENED" and new_status in ("PENDING", "IN_PROGRESS"):
+                new_status = "REOPENED"
+            if audit.status_type != new_status:
+                audit.status_type = new_status
+                await session.commit()
+            return new_status

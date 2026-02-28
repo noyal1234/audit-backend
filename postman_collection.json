@@ -1,0 +1,1283 @@
+{
+  "info": {
+    "name": "Dealer Hygiene Compliance Backend",
+    "description": "Complete API collection for the Dealer Hygiene Compliance Backend.\n\nSetup:\n1. Run 'POST /auth/login' with Super Admin credentials first.\n2. The access_token is auto-saved to the collection variable.\n3. All subsequent requests use it via Bearer auth.\n\nHierarchy: Country -> Zone -> Facility (Dealership) -> Checkpoints + Categories (facility-scoped, many-to-many)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "countryId", "value": "" },
+    { "key": "zoneId", "value": "" },
+    { "key": "dealershipId", "value": "" },
+    { "key": "dealershipUserId", "value": "" },
+    { "key": "employeeId", "value": "" },
+    { "key": "employeeUserId", "value": "" },
+    { "key": "categoryId", "value": "" },
+    { "key": "categoryId2", "value": "" },
+    { "key": "checkpointId", "value": "" },
+    { "key": "auditId", "value": "" },
+    { "key": "auditCheckpointCategoryId", "value": "" },
+    { "key": "stellantisAdminId", "value": "" },
+    { "key": "shiftConfigId", "value": "" },
+    { "key": "userId", "value": "" },
+    { "key": "imageId", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{accessToken}}", "type": "string" }
+    ]
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] },
+            "auth": { "type": "noauth" }
+          }
+        },
+        {
+          "name": "Readiness Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/ready", "host": ["{{baseUrl}}"], "path": ["ready"] },
+            "auth": { "type": "noauth" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (Super Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.access_token);",
+                  "    pm.collectionVariables.set('refreshToken', json.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"superadmin@stellantis.com\",\n  \"password\": \"SuperAdmin@123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "auth": { "type": "noauth" }
+          }
+        },
+        {
+          "name": "Login (Stellantis Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.access_token);",
+                  "    pm.collectionVariables.set('refreshToken', json.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin.india@stellantis.com\",\n  \"password\": \"StellAdmin@123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "auth": { "type": "noauth" }
+          }
+        },
+        {
+          "name": "Login (Dealership)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.access_token);",
+                  "    pm.collectionVariables.set('refreshToken', json.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"mumbai.motors@dealer.com\",\n  \"password\": \"Dealer@1234\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "auth": { "type": "noauth" }
+          }
+        },
+        {
+          "name": "Login (Employee)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.access_token);",
+                  "    pm.collectionVariables.set('refreshToken', json.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"raj.kumar@dealer.com\",\n  \"password\": \"Employee@123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "auth": { "type": "noauth" }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.access_token);",
+                  "    pm.collectionVariables.set('refreshToken', json.refresh_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] },
+            "auth": { "type": "noauth" }
+          }
+        },
+        {
+          "name": "Get Current User (Me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin (Super Admin only)",
+      "item": [
+        {
+          "name": "Create Stellantis Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('stellantisAdminId', json.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin.india@stellantis.com\",\n  \"password\": \"StellAdmin@123\",\n  \"role_type\": \"STELLANTIS_ADMIN\",\n  \"country_id\": \"{{countryId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/stellantis", "host": ["{{baseUrl}}"], "path": ["admin", "stellantis"] }
+          }
+        },
+        {
+          "name": "List Stellantis Admins",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/stellantis?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "stellantis"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Stellantis Admin by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/stellantis/{{stellantisAdminId}}", "host": ["{{baseUrl}}"], "path": ["admin", "stellantis", "{{stellantisAdminId}}"] }
+          }
+        },
+        {
+          "name": "Update Stellantis Admin",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin.india.updated@stellantis.com\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/stellantis/{{stellantisAdminId}}", "host": ["{{baseUrl}}"], "path": ["admin", "stellantis", "{{stellantisAdminId}}"] }
+          }
+        },
+        {
+          "name": "Delete Stellantis Admin",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/stellantis/{{stellantisAdminId}}", "host": ["{{baseUrl}}"], "path": ["admin", "stellantis", "{{stellantisAdminId}}"] }
+          }
+        },
+        {
+          "name": "Get System Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/system-stats", "host": ["{{baseUrl}}"], "path": ["admin", "system-stats"] }
+          }
+        },
+        {
+          "name": "Rebuild Analytics",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/rebuild-analytics", "host": ["{{baseUrl}}"], "path": ["admin", "rebuild-analytics"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Countries",
+      "item": [
+        {
+          "name": "Create Country",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('countryId', json.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"India\",\n  \"code\": \"IN\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/countries", "host": ["{{baseUrl}}"], "path": ["countries"] }
+          }
+        },
+        {
+          "name": "List Countries",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/countries?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["countries"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Country by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/countries/{{countryId}}", "host": ["{{baseUrl}}"], "path": ["countries", "{{countryId}}"] }
+          }
+        },
+        {
+          "name": "Update Country",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"India (Updated)\",\n  \"code\": \"IND\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/countries/{{countryId}}", "host": ["{{baseUrl}}"], "path": ["countries", "{{countryId}}"] }
+          }
+        },
+        {
+          "name": "Delete Country",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/countries/{{countryId}}", "host": ["{{baseUrl}}"], "path": ["countries", "{{countryId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Zones",
+      "item": [
+        {
+          "name": "Create Zone",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('zoneId', json.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"West Zone\",\n  \"country_id\": \"{{countryId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/zones", "host": ["{{baseUrl}}"], "path": ["zones"] }
+          }
+        },
+        {
+          "name": "List Zones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/zones?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["zones"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Zone by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/zones/{{zoneId}}", "host": ["{{baseUrl}}"], "path": ["zones", "{{zoneId}}"] }
+          }
+        },
+        {
+          "name": "Update Zone",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"West Zone (Updated)\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/zones/{{zoneId}}", "host": ["{{baseUrl}}"], "path": ["zones", "{{zoneId}}"] }
+          }
+        },
+        {
+          "name": "Delete Zone",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/zones/{{zoneId}}", "host": ["{{baseUrl}}"], "path": ["zones", "{{zoneId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dealerships",
+      "item": [
+        {
+          "name": "Create Dealership",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('dealershipId', json.id);",
+                  "    if (json.user_id) pm.collectionVariables.set('dealershipUserId', json.user_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"zone_id\": \"{{zoneId}}\",\n  \"name\": \"Mumbai Motors Pvt Ltd\",\n  \"code\": \"MUM-001\",\n  \"address\": \"42 Marine Drive, Mumbai, Maharashtra 400001\",\n  \"dealer_name\": \"Rajesh Sharma\",\n  \"dealer_phone\": \"+91-9876543210\",\n  \"dealer_email\": \"rajesh.sharma@mumbaimotors.com\",\n  \"dealer_designation\": \"General Manager\",\n  \"email\": \"mumbai.motors@dealer.com\",\n  \"password\": \"Dealer@1234\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/dealerships", "host": ["{{baseUrl}}"], "path": ["dealerships"] }
+          }
+        },
+        {
+          "name": "List Dealerships",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dealerships?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["dealerships"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Dealership by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/dealerships/{{dealershipId}}", "host": ["{{baseUrl}}"], "path": ["dealerships", "{{dealershipId}}"] }
+          }
+        },
+        {
+          "name": "Update Dealership",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Mumbai Premium Motors Pvt Ltd\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/dealerships/{{dealershipId}}", "host": ["{{baseUrl}}"], "path": ["dealerships", "{{dealershipId}}"] }
+          }
+        },
+        {
+          "name": "Get Dealer Contact",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/dealerships/{{dealershipId}}/contact", "host": ["{{baseUrl}}"], "path": ["dealerships", "{{dealershipId}}", "contact"] }
+          }
+        },
+        {
+          "name": "Update Dealer Contact",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dealer_name\": \"Rajesh K. Sharma\",\n  \"dealer_phone\": \"+91-9876543211\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/dealerships/{{dealershipId}}/contact", "host": ["{{baseUrl}}"], "path": ["dealerships", "{{dealershipId}}", "contact"] }
+          }
+        },
+        {
+          "name": "Delete Dealership",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/dealerships/{{dealershipId}}", "host": ["{{baseUrl}}"], "path": ["dealerships", "{{dealershipId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Employees",
+      "item": [
+        {
+          "name": "Create Employee",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('employeeId', json.id);",
+                  "    if (json.user_id) pm.collectionVariables.set('employeeUserId', json.user_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"facility_id\": \"{{dealershipId}}\",\n  \"name\": \"Raj Kumar\",\n  \"email\": \"raj.kumar@dealer.com\",\n  \"password\": \"Employee@123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/employees", "host": ["{{baseUrl}}"], "path": ["employees"] }
+          }
+        },
+        {
+          "name": "List Employees",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/employees?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["employees"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Employee by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/employees/{{employeeId}}", "host": ["{{baseUrl}}"], "path": ["employees", "{{employeeId}}"] }
+          }
+        },
+        {
+          "name": "Update Employee",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Raj Kumar Singh\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/employees/{{employeeId}}", "host": ["{{baseUrl}}"], "path": ["employees", "{{employeeId}}"] }
+          }
+        },
+        {
+          "name": "Delete Employee",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/employees/{{employeeId}}", "host": ["{{baseUrl}}"], "path": ["employees", "{{employeeId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Categories (Facility-Scoped)",
+      "description": "Facility-scoped categories. DEALERSHIP creates; EMPLOYEE can view. Login as Dealership first.",
+      "item": [
+        {
+          "name": "Create Category - Hygiene",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('categoryId', json.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"facility_id\": \"{{dealershipId}}\",\n  \"name\": \"Hygiene\",\n  \"description\": \"Cleanliness and sanitation standards\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/categories", "host": ["{{baseUrl}}"], "path": ["categories"] }
+          }
+        },
+        {
+          "name": "Create Category - Safety",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('categoryId2', json.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"facility_id\": \"{{dealershipId}}\",\n  \"name\": \"Safety\",\n  \"description\": \"Safety compliance and equipment checks\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/categories", "host": ["{{baseUrl}}"], "path": ["categories"] }
+          }
+        },
+        {
+          "name": "Create Category - Organization",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"facility_id\": \"{{dealershipId}}\",\n  \"name\": \"Organization\",\n  \"description\": \"Workspace organization and tidiness\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/categories", "host": ["{{baseUrl}}"], "path": ["categories"] }
+          }
+        },
+        {
+          "name": "List Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/categories?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["categories"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Categories by Facility",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/categories?facility_id={{dealershipId}}&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["categories"],
+              "query": [
+                { "key": "facility_id", "value": "{{dealershipId}}" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Category by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["categories", "{{categoryId}}"] }
+          }
+        },
+        {
+          "name": "Update Category",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Hygiene & Cleanliness\",\n  \"description\": \"Updated: comprehensive cleanliness standards\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["categories", "{{categoryId}}"] }
+          }
+        },
+        {
+          "name": "Delete Category",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["categories", "{{categoryId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Checkpoints (Facility-Scoped)",
+      "description": "Checkpoints are areas inside a facility. Creating requires an image upload (multipart/form-data). Login as Dealership first.",
+      "item": [
+        {
+          "name": "Create Checkpoint - Showroom Floor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('checkpointId', json.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Showroom Floor", "type": "text" },
+                { "key": "file", "type": "file", "src": "", "description": "Select an image (JPEG/PNG) of the checkpoint area" },
+                { "key": "facility_id", "value": "{{dealershipId}}", "type": "text", "description": "Optional if logged in as Dealership" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/checkpoints", "host": ["{{baseUrl}}"], "path": ["checkpoints"] }
+          }
+        },
+        {
+          "name": "Create Checkpoint - Workshop Bay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Workshop Bay", "type": "text" },
+                { "key": "file", "type": "file", "src": "", "description": "Select an image" },
+                { "key": "facility_id", "value": "{{dealershipId}}", "type": "text" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/checkpoints", "host": ["{{baseUrl}}"], "path": ["checkpoints"] }
+          }
+        },
+        {
+          "name": "Create Checkpoint - Customer Restroom",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Customer Restroom", "type": "text" },
+                { "key": "file", "type": "file", "src": "", "description": "Select an image" },
+                { "key": "facility_id", "value": "{{dealershipId}}", "type": "text" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/checkpoints", "host": ["{{baseUrl}}"], "path": ["checkpoints"] }
+          }
+        },
+        {
+          "name": "List Checkpoints",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/checkpoints?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["checkpoints"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Checkpoints by Facility",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/checkpoints?facility_id={{dealershipId}}&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["checkpoints"],
+              "query": [
+                { "key": "facility_id", "value": "{{dealershipId}}" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Checkpoint by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/checkpoints/{{checkpointId}}", "host": ["{{baseUrl}}"], "path": ["checkpoints", "{{checkpointId}}"] }
+          }
+        },
+        {
+          "name": "Update Checkpoint",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Main Showroom Floor\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/checkpoints/{{checkpointId}}", "host": ["{{baseUrl}}"], "path": ["checkpoints", "{{checkpointId}}"] }
+          }
+        },
+        {
+          "name": "Delete Checkpoint",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/checkpoints/{{checkpointId}}", "host": ["{{baseUrl}}"], "path": ["checkpoints", "{{checkpointId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Checkpoint-Category Assignments",
+      "description": "Many-to-many: assign categories to checkpoints. Both must belong to the same facility.",
+      "item": [
+        {
+          "name": "Assign Category (Hygiene) to Checkpoint",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category_id\": \"{{categoryId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/checkpoints/{{checkpointId}}/categories", "host": ["{{baseUrl}}"], "path": ["checkpoints", "{{checkpointId}}", "categories"] }
+          }
+        },
+        {
+          "name": "Assign Category (Safety) to Checkpoint",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category_id\": \"{{categoryId2}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/checkpoints/{{checkpointId}}/categories", "host": ["{{baseUrl}}"], "path": ["checkpoints", "{{checkpointId}}", "categories"] }
+          }
+        },
+        {
+          "name": "List Categories for Checkpoint",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/checkpoints/{{checkpointId}}/categories", "host": ["{{baseUrl}}"], "path": ["checkpoints", "{{checkpointId}}", "categories"] }
+          }
+        },
+        {
+          "name": "Remove Category from Checkpoint",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/checkpoints/{{checkpointId}}/categories/{{categoryId2}}", "host": ["{{baseUrl}}"], "path": ["checkpoints", "{{checkpointId}}", "categories", "{{categoryId2}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shifts",
+      "item": [
+        {
+          "name": "Get Current Shift",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/shifts/current", "host": ["{{baseUrl}}"], "path": ["shifts", "current"] },
+            "auth": { "type": "noauth" }
+          }
+        },
+        {
+          "name": "Get Shift Config",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/shifts/config", "host": ["{{baseUrl}}"], "path": ["shifts", "config"] }
+          }
+        },
+        {
+          "name": "Update Shift Config",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Morning Shift\",\n  \"start_time\": \"06:00:00\",\n  \"end_time\": \"14:00:00\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/shifts/config/{{shiftConfigId}}", "host": ["{{baseUrl}}"], "path": ["shifts", "config", "{{shiftConfigId}}"] }
+          }
+        },
+        {
+          "name": "Get Shift History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/shifts/history?date=2026-02-28",
+              "host": ["{{baseUrl}}"],
+              "path": ["shifts", "history"],
+              "query": [
+                { "key": "date", "value": "2026-02-28" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Audits (Snapshot-Based)",
+      "item": [
+        {
+          "name": "Get Current Audit (Lazy Create)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('auditId', json.id);",
+                  "    if (json.audit_checkpoints && json.audit_checkpoints.length > 0) {",
+                  "        var cp = json.audit_checkpoints[0];",
+                  "        if (cp.categories && cp.categories.length > 0) {",
+                  "            pm.collectionVariables.set('auditCheckpointCategoryId', cp.categories[0].id);",
+                  "        }",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/audits/current", "host": ["{{baseUrl}}"], "path": ["audits", "current"] }
+          }
+        },
+        {
+          "name": "List Audits",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/audits?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["audits"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Audit by ID (with Snapshots)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/audits/{{auditId}}", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}"] }
+          }
+        },
+        {
+          "name": "Get Audit Progress",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/audits/{{auditId}}/progress", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}", "progress"] }
+          }
+        },
+        {
+          "name": "Complete Category",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"remarks\": \"Area cleaned and verified\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/audits/{{auditId}}/checkpoint-categories/{{auditCheckpointCategoryId}}/complete",
+              "host": ["{{baseUrl}}"],
+              "path": ["audits", "{{auditId}}", "checkpoint-categories", "{{auditCheckpointCategoryId}}", "complete"]
+            }
+          }
+        },
+        {
+          "name": "Uncomplete Category",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/audits/{{auditId}}/checkpoint-categories/{{auditCheckpointCategoryId}}/uncomplete",
+              "host": ["{{baseUrl}}"],
+              "path": ["audits", "{{auditId}}", "checkpoint-categories", "{{auditCheckpointCategoryId}}", "uncomplete"]
+            }
+          }
+        },
+        {
+          "name": "Finalize Audit (DEALERSHIP+)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/audits/{{auditId}}/finalize", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}", "finalize"] }
+          }
+        },
+        {
+          "name": "Reopen Audit (DEALERSHIP+)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/audits/{{auditId}}/reopen", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}", "reopen"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "Country Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/analytics/country-summary", "host": ["{{baseUrl}}"], "path": ["analytics", "country-summary"] }
+          }
+        },
+        {
+          "name": "Zone Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/zone-summary?zone_id={{zoneId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "zone-summary"],
+              "query": [{ "key": "zone_id", "value": "{{zoneId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Facility Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/facility-summary?facility_id={{dealershipId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "facility-summary"],
+              "query": [{ "key": "facility_id", "value": "{{dealershipId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Trends (Monthly)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/trends?period=monthly",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "trends"],
+              "query": [{ "key": "period", "value": "monthly" }]
+            }
+          }
+        },
+        {
+          "name": "Category Breakdown",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/analytics/category-breakdown", "host": ["{{baseUrl}}"], "path": ["analytics", "category-breakdown"] }
+          }
+        },
+        {
+          "name": "Top Issues",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/analytics/top-issues", "host": ["{{baseUrl}}"], "path": ["analytics", "top-issues"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "item": [
+        {
+          "name": "Search Dealerships",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/search?query=mumbai&type=dealership",
+              "host": ["{{baseUrl}}"],
+              "path": ["search"],
+              "query": [
+                { "key": "query", "value": "mumbai" },
+                { "key": "type", "value": "dealership" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Search Employees",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/search?query=raj&type=employee",
+              "host": ["{{baseUrl}}"],
+              "path": ["search"],
+              "query": [
+                { "key": "query", "value": "raj" },
+                { "key": "type", "value": "employee" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Search Audits",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/search?query=morning&type=audit",
+              "host": ["{{baseUrl}}"],
+              "path": ["search"],
+              "query": [
+                { "key": "query", "value": "morning" },
+                { "key": "type", "value": "audit" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"updated.user@stellantis.com\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"SuperAdmin@123\",\n  \"new_password\": \"NewSecurePass@456\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/users/change-password", "host": ["{{baseUrl}}"], "path": ["users", "change-password"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Media",
+      "item": [
+        {
+          "name": "Delete Image",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/images/{{imageId}}", "host": ["{{baseUrl}}"], "path": ["images", "{{imageId}}"] }
+          }
+        }
+      ]
+    }
+  ]
+}
