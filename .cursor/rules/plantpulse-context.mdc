@@ -1,0 +1,12 @@
+---
+description: PlantPulse project context — Stellantis simulator, config-driven, OPC-UA
+alwaysApply: true
+---
+
+# PlantPulse Project Context
+
+- **What it is:** Stellantis Automotive Assembly synthetic data generator. Simulates station types (bolt tightening, spot weld, press), wraps signals in a simulated Siemens S7-1500 PLC, and exposes them via OPC-UA. NodeRED subscribes as to a real plant; the PLC is the boundary.
+- **Spec:** Behaviour and design are defined in `docs/stellantis_simulator_spec.md`. Implement to that spec; do **not** copy-paste code from the doc — it is indicative. Follow this codebase’s patterns (logging, services, Pydantic) and parichay-style architecture.
+- **Stack:** Python 3.11+, asyncua, SimPy, NumPy, Pydantic, PyYAML. **App-level settings** live in `src/configs/` (BaseSettings, env). **Plant/line YAML** (plc, machines, stations, production, fault_injection, noise) path is **derived from app settings** (e.g. a setting like `plant_config_path` or `config_root`), not hardcoded; the loader reads from that path. Default or example can point at a `plant_config/` directory.
+- **Extensibility:** New station type = new machine/station YAML, new class implementing the relevant base (e.g. `BaseMachineSimulator`), and registry entry. PLC and OPC-UA layer stay unchanged.
+- **Layers:** Config → ProductionLineScheduler (SimPy) → StationSimulator → MachineSimulator (+ physics, fault, noise) → PLCSimulator → OPC-UA server. When adding services or repos, follow the architecture rules in `.cursor/rules/`.

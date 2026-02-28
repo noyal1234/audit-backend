@@ -1,0 +1,22 @@
+---
+description: Pydantic v2, BaseSettings, DB/schema conventions
+globs: src/models/**/*.py, src/configs/**/*.py, src/database/**/schema/**/*.py
+alwaysApply: false
+---
+
+# Pydantic and Config
+
+- **Pydantic v2** only. Check existing models in the codebase first; reuse or extend them. When in doubt, ask before adding new model shapes.
+- Strong typing on all fields. Use `model_validate()` for schema/ORM → model conversion inside repositories.
+
+## Settings
+
+- Settings extend `BaseSettings` with a non-empty `PREFIX` class variable and `get_instance()` singleton.
+- Use `Field(..., description="...")` for env-driven fields. No hardcoded secrets.
+
+## Database / Schema
+
+- Enum columns: store as string (VARCHAR); no CheckConstraint for enum values.
+- Metadata columns: use `_metadata` suffix (e.g. `job_metadata`, not `metadata`).
+- DateTime: `timezone=True` with an (UTC) comment. Descriptive column comments required.
+- **JSONB:** Every JSONB column must have a corresponding strongly typed Pydantic v2 model (e.g. `job_metadata` → `JobMetadataModel`).

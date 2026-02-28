@@ -1,0 +1,15 @@
+---
+description: Alembic for DB schema; schema changes and env.py must be updated
+globs: postgres_migrations/**/*.py, src/database/postgres/schema/**/*.py
+alwaysApply: false
+---
+
+# PostgreSQL Schema and Migrations
+
+- **Use Alembic** to manage PostgreSQL schema migrations. Do not automate migration creation.
+- **Create migrations manually:** add scripts under `postgres_migrations/versions/`. Use project scripts if present (e.g. `scripts/create_postgres_migration.sh "description"`). Edit the generated file as needed, then run (e.g. `alembic -c postgres_alembic.ini upgrade head` or `scripts/run_postgres_migration.sh`).
+- **When adding or changing a schema class** in `src/database/postgres/schema/`:
+  1. Implement or update the SQLAlchemy schema class.
+  2. **Update `postgres_migrations/env.py`**: import the new or changed schema so Alembic autogenerate can see it (e.g. `from src.database.postgres.schema.foo_schema import FooSchema  # noqa: F401`). Without this, new tables/columns will not be detected.
+  3. Create a new migration in `postgres_migrations/versions/` that reflects the schema change.
+- Config: Alembic config file (e.g. `postgres_alembic.ini`); environment and target_metadata are set in `postgres_migrations/env.py`.

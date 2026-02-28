@@ -1,0 +1,12 @@
+---
+description: tests/ layout and tests/verify for feature validation
+globs: tests/**/*.py
+alwaysApply: false
+---
+
+# Tests and Feature Validation
+
+- **Tests live only under `tests/`.** Use the same pattern as Parichay/Pravah where applicable.
+- **tests/verify** is for **feature validation** against the running application: scripts assert status codes and response shape; **exit 0 on pass, non-zero on fail**. Suitable for smoke/CI. Run with `python -m tests.verify.<script>` or `python -m tests.verify.verify_all` to run all verify scripts.
+- **tests/debug** is for tracing flows and inspecting responses (no or minimal assertions); run with `python -m tests.debug.<script>`.
+- **Layout:** `tests/_helpers/` for shared code (config loader, API client, fixtures); `tests/debug/` for manual trace scripts; `tests/verify/` for assertion-based feature validation; `test_*.py` for pytest in-process unit/small integration (e.g. TestClient). When adding a new feature, add or extend a verify script so behavior is asserted and can be run via `verify_all`.

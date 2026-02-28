@@ -1,0 +1,741 @@
+{
+	"info": {
+		"_postman_id": "audit-backend-v1",
+		"name": "Dealer Hygiene Compliance API",
+		"description": "Dealer Hygiene Compliance API. All roles login via POST /auth/login. Run Login first to set access_token. Set country_id for Stellantis Admin; zone_id for Dealerships; facility_id for Employees and Audits.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{ "key": "token", "value": "{{access_token}}", "type": "string" }
+		]
+	},
+	"variable": [
+		{ "key": "base_url", "value": "http://localhost:8000" },
+		{ "key": "access_token", "value": "" },
+		{ "key": "refresh_token", "value": "" },
+		{ "key": "zone_id", "value": "" },
+		{ "key": "country_id", "value": "" },
+		{ "key": "facility_id", "value": "" },
+		{ "key": "category_id", "value": "" },
+		{ "key": "subcategory_id", "value": "" },
+		{ "key": "audit_id", "value": "" },
+		{ "key": "user_id", "value": "" },
+		{ "key": "employee_id", "value": "" },
+		{ "key": "checkpoint_id", "value": "" }
+	],
+	"item": [
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const json = pm.response.json();",
+									"    pm.collectionVariables.set('access_token', json.access_token);",
+									"    pm.collectionVariables.set('refresh_token', json.refresh_token || '');",
+									"    console.log('[OK] Token saved');",
+									"} else {",
+									"    console.log('[ERROR] Login failed:', pm.response.text());",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"admin123\"\n}"
+						},
+						"url": "{{base_url}}/auth/login",
+						"description": "Login with email and password (same endpoint for all roles). Saves access_token and refresh_token. Run this first."
+					}
+				},
+				{
+					"name": "Refresh Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const json = pm.response.json();",
+									"    pm.collectionVariables.set('access_token', json.access_token);",
+									"    pm.collectionVariables.set('refresh_token', json.refresh_token || '');",
+									"    console.log('[OK] Token refreshed');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+						},
+						"url": "{{base_url}}/auth/refresh",
+						"description": "Uses refresh_token; updates access_token and refresh_token."
+					}
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "POST",
+						"url": "{{base_url}}/auth/logout"
+					}
+				},
+				{
+					"name": "Get Current User (Me)",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/auth/me"
+					}
+				}
+			]
+		},
+		{
+			"name": "Admin",
+			"item": [
+				{
+					"name": "Create Stellantis Admin",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"stellantis@example.com\",\n  \"password\": \"stellantis123\",\n  \"role_type\": \"STELLANTIS_ADMIN\",\n  \"facility_id\": null,\n  \"country_id\": \"{{country_id}}\"\n}"
+						},
+						"url": "{{base_url}}/admin/stellantis",
+						"description": "Country-scoped admin. Set country_id (e.g. from Get Countries). Admin can then login with this email and password."
+					}
+				},
+				{
+					"name": "Get All Stellantis Admins",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/admin/stellantis?page=1&limit=20"
+					}
+				},
+				{
+					"name": "Get Stellantis Admin by ID",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/admin/stellantis/{{user_id}}"
+					}
+				},
+				{
+					"name": "Update Stellantis Admin",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"stellantis_updated@example.com\"\n}"
+						},
+						"url": "{{base_url}}/admin/stellantis/{{user_id}}"
+					}
+				},
+				{
+					"name": "System Stats",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/admin/system-stats"
+					}
+				},
+				{
+					"name": "Rebuild Analytics",
+					"request": {
+						"method": "POST",
+						"url": "{{base_url}}/admin/rebuild-analytics"
+					}
+				}
+			]
+		},
+		{
+			"name": "Countries",
+			"item": [
+				{
+					"name": "Create Country",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"India\",\n  \"code\": \"IN\"\n}"
+						},
+						"url": "{{base_url}}/countries"
+					}
+				},
+				{
+					"name": "Get Countries",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/countries?page=1&limit=20&sort=created_at&order=desc"
+					}
+				},
+				{
+					"name": "Get Country by ID",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/countries/{{country_id}}"
+					}
+				},
+				{
+					"name": "Update Country",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"India Updated\",\n  \"code\": \"IN\"\n}"
+						},
+						"url": "{{base_url}}/countries/{{country_id}}"
+					}
+				},
+				{
+					"name": "Delete Country",
+					"request": {
+						"method": "DELETE",
+						"url": "{{base_url}}/countries/{{country_id}}"
+					}
+				}
+			]
+		},
+		{
+			"name": "Zones",
+			"item": [
+				{
+					"name": "Create Zone",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"North Zone\",\n  \"country_id\": null\n}"
+						},
+						"url": "{{base_url}}/zones"
+					}
+				},
+				{
+					"name": "Get All Zones",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/zones?page=1&limit=20&sort=created_at&order=desc&country_id="
+					}
+				},
+				{
+					"name": "Get Zone by ID",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/zones/{{zone_id}}"
+					}
+				},
+				{
+					"name": "Update Zone",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"North Zone Updated\"\n}"
+						},
+						"url": "{{base_url}}/zones/{{zone_id}}"
+					}
+				},
+				{
+					"name": "Delete Zone",
+					"request": {
+						"method": "DELETE",
+						"url": "{{base_url}}/zones/{{zone_id}}"
+					}
+				}
+			]
+		},
+		{
+			"name": "Dealerships",
+			"item": [
+				{
+					"name": "Create Dealership",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"zone_id\": \"{{zone_id}}\",\n  \"name\": \"ABC Motors\",\n  \"code\": \"ABC001\",\n  \"address\": \"123 Main St\",\n  \"dealer_name\": \"John Doe\",\n  \"dealer_phone\": \"+91-9876543210\",\n  \"dealer_email\": \"john@abcmotors.com\",\n  \"dealer_designation\": \"Owner\",\n  \"email\": \"dealership@abcmotors.com\",\n  \"password\": \"securepass123\"\n}"
+						},
+						"url": "{{base_url}}/dealerships",
+						"description": "Requires dealer contact (dealer_name, dealer_phone, dealer_email) plus email and password (creates dealership login user). Set zone_id first."
+					}
+				},
+				{
+					"name": "Get All Dealerships",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/dealerships?page=1&limit=20&sort=created_at&order=desc&zone_id=&search="
+					}
+				},
+				{
+					"name": "Get Dealership by ID",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/dealerships/{{facility_id}}"
+					}
+				},
+				{
+					"name": "Get Dealer Contact",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/dealerships/{{facility_id}}/contact",
+						"description": "Get dealer contact details. Super Admin, Stellantis Admin, Dealership only; Employee returns 403."
+					}
+				},
+				{
+					"name": "Update Dealer Contact",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"dealer_name\": \"John Doe\",\n  \"dealer_phone\": \"+91-9876543210\",\n  \"dealer_email\": \"john@abcmotors.com\",\n  \"dealer_designation\": \"Owner\"\n}"
+						},
+						"url": "{{base_url}}/dealerships/{{facility_id}}/contact",
+						"description": "Partial update of dealer contact. Employee forbidden."
+					}
+				},
+				{
+					"name": "Update Dealership",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"ABC Motors Updated\",\n  \"code\": \"ABC001\",\n  \"address\": \"456 New St\",\n  \"dealer_name\": \"Jane Doe\",\n  \"dealer_phone\": \"+91-9876543211\",\n  \"dealer_email\": \"jane@abcmotors.com\",\n  \"dealer_designation\": \"Manager\"\n}"
+						},
+						"url": "{{base_url}}/dealerships/{{facility_id}}",
+						"description": "Can update dealer contact fields."
+					}
+				},
+				{
+					"name": "Delete Dealership",
+					"request": {
+						"method": "DELETE",
+						"url": "{{base_url}}/dealerships/{{facility_id}}"
+					}
+				}
+			]
+		},
+		{
+			"name": "Employees",
+			"item": [
+				{
+					"name": "Create Employee",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"facility_id\": \"{{facility_id}}\",\n  \"name\": \"John Doe\",\n  \"email\": \"john@dealership.com\",\n  \"password\": \"securepass123\"\n}"
+						},
+						"url": "{{base_url}}/employees",
+						"description": "Creates employee + login user. Employee can then use POST /auth/login with this email and password. Update Employee does not accept email."
+					}
+				},
+				{
+					"name": "Get Employees",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/employees?page=1&limit=20&sort=created_at&order=desc&dealership_id=&search="
+					}
+				},
+				{
+					"name": "Get Employee by ID",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/employees/{{employee_id}}"
+					}
+				},
+				{
+					"name": "Update Employee",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"John Doe Updated\"\n}"
+						},
+						"url": "{{base_url}}/employees/{{employee_id}}"
+					}
+				},
+				{
+					"name": "Delete Employee",
+					"request": {
+						"method": "DELETE",
+						"url": "{{base_url}}/employees/{{employee_id}}"
+					}
+				}
+			]
+		},
+		{
+			"name": "Audit Checklist",
+			"item": [
+				{
+					"name": "Create Category",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Hygiene\",\n  \"description\": \"Hygiene and cleanliness\"\n}"
+						},
+						"url": "{{base_url}}/audit/categories"
+					}
+				},
+				{
+					"name": "Get Categories",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/audit/categories?page=1&limit=20&sort=created_at&order=desc"
+					}
+				},
+				{
+					"name": "Get Category by ID",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/audit/categories/{{category_id}}"
+					}
+				},
+				{
+					"name": "Update Category",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Hygiene Updated\",\n  \"description\": \"Updated description\"\n}"
+						},
+						"url": "{{base_url}}/audit/categories/{{category_id}}"
+					}
+				},
+				{
+					"name": "Create Subcategory",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"category_id\": \"{{category_id}}\",\n  \"name\": \"Floor Cleanliness\",\n  \"description\": \"Floor and surface check\"\n}"
+						},
+						"url": "{{base_url}}/audit/subcategories"
+					}
+				},
+				{
+					"name": "Get Subcategories",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/audit/subcategories?page=1&limit=20&category_id=&sort=created_at&order=desc"
+					}
+				},
+				{
+					"name": "Get Subcategory by ID",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/audit/subcategories/{{subcategory_id}}"
+					}
+				},
+				{
+					"name": "Create Checkpoint",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subcategory_id\": \"{{subcategory_id}}\",\n  \"facility_id\": \"{{facility_id}}\",\n  \"name\": \"Floor swept\",\n  \"description\": \"Check floor is swept\",\n  \"requires_photo\": true,\n  \"active\": true\n}"
+						},
+						"url": "{{base_url}}/audit/checkpoints"
+					}
+				},
+				{
+					"name": "Get Checkpoints",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/audit/checkpoints?page=1&limit=20&facility_id=&subcategory_id=&sort=created_at&order=desc"
+					}
+				},
+				{
+					"name": "Get Checkpoint by ID",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/audit/checkpoints/{{checkpoint_id}}"
+					}
+				},
+				{
+					"name": "Update Checkpoint",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Floor swept (updated)\",\n  \"requires_photo\": false,\n  \"active\": true\n}"
+						},
+						"url": "{{base_url}}/audit/checkpoints/{{checkpoint_id}}"
+					}
+				}
+			]
+		},
+		{
+			"name": "Shifts",
+			"item": [
+				{
+					"name": "Get Current Shift",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/shifts/current"
+					}
+				},
+				{
+					"name": "Get Shift Config",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/shifts/config"
+					}
+				},
+				{
+					"name": "Get Shift History",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/shifts/history?date=2025-02-27"
+					}
+				}
+			]
+		},
+		{
+			"name": "Audits",
+			"item": [
+				{
+					"name": "Create Audit",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"facility_id\": \"{{facility_id}}\",\n  \"shift_type\": \"MORNING\",\n  \"shift_date\": \"2025-02-27\"\n}"
+						},
+						"url": "{{base_url}}/audits"
+					}
+				},
+				{
+					"name": "Get Audits",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/audits?page=1&limit=20&zone_id=&facility_id=&shift=&date=&status_type=&sort=created_at&order=desc"
+					}
+				},
+				{
+					"name": "Get Audit by ID",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/audits/{{audit_id}}"
+					}
+				},
+				{
+					"name": "Record Checkpoint Result",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"compliant\": true,\n  \"manual_override\": false,\n  \"image_path\": null,\n  \"ai_status_type\": null,\n  \"ai_result\": null\n}"
+						},
+						"url": "{{base_url}}/audits/{{audit_id}}/checkpoints/{{checkpoint_id}}"
+					}
+				},
+				{
+					"name": "Upload Checkpoint Image",
+					"request": {
+						"method": "POST",
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{ "key": "file", "type": "file", "src": "" }
+							]
+						},
+						"url": "{{base_url}}/audits/{{audit_id}}/checkpoints/{{checkpoint_id}}/image"
+					}
+				},
+				{
+					"name": "Get AI Result",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/audits/{{audit_id}}/checkpoints/{{checkpoint_id}}/ai-result"
+					}
+				},
+				{
+					"name": "Finalize Audit",
+					"request": {
+						"method": "PATCH",
+						"url": "{{base_url}}/audits/{{audit_id}}/finalize"
+					}
+				},
+				{
+					"name": "Reopen Audit",
+					"request": {
+						"method": "PATCH",
+						"url": "{{base_url}}/audits/{{audit_id}}/reopen"
+					}
+				},
+				{
+					"name": "Get Audit Images",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/audits/{{audit_id}}/images"
+					}
+				}
+			]
+		},
+		{
+			"name": "Analytics",
+			"item": [
+				{
+					"name": "Country Summary",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/analytics/country-summary?zone_id=&facility_id=&date_from=&date_to=&shift_type="
+					}
+				},
+				{
+					"name": "Zone Summary",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/analytics/zone-summary?zone_id={{zone_id}}&date_from=&date_to=&shift_type="
+					}
+				},
+				{
+					"name": "Facility Summary",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/analytics/facility-summary?facility_id={{facility_id}}&date_from=&date_to=&shift_type="
+					}
+				},
+				{
+					"name": "Audit Trends",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/analytics/trends?zone_id=&facility_id=&period=monthly"
+					}
+				},
+				{
+					"name": "Category Breakdown",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/analytics/category-breakdown?zone_id=&facility_id=&date_from=&date_to="
+					}
+				},
+				{
+					"name": "Top Issues",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/analytics/top-issues?zone_id=&facility_id=&date_from=&date_to="
+					}
+				}
+			]
+		},
+		{
+			"name": "Search",
+			"item": [
+				{
+					"name": "Unified Search",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/search?query=abc&type=dealership&page=1&limit=20",
+							"host": ["{{base_url}}"],
+							"path": ["search"],
+							"query": [
+								{ "key": "query", "value": "abc" },
+								{ "key": "type", "value": "dealership" },
+								{ "key": "page", "value": "1" },
+								{ "key": "limit", "value": "20" }
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Users",
+			"item": [
+				{
+					"name": "Get All Users",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/users?page=1&limit=20&sort=created_at&order=desc"
+					}
+				},
+				{
+					"name": "Get User by ID",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/users/{{user_id}}"
+					}
+				},
+				{
+					"name": "Update User",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"updated@example.com\"\n}"
+						},
+						"url": "{{base_url}}/users/{{user_id}}"
+					}
+				},
+				{
+					"name": "Change Password",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"current_password\": \"admin123\",\n  \"new_password\": \"newpassword123\"\n}"
+						},
+						"url": "{{base_url}}/users/change-password"
+					}
+				}
+			]
+		},
+		{
+			"name": "Health",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"url": "{{base_url}}/health"
+					}
+				},
+				{
+					"name": "Ready Check",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"url": "{{base_url}}/ready"
+					}
+				}
+			]
+		}
+	]
+}

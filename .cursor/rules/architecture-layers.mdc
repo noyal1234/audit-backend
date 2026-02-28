@@ -1,0 +1,26 @@
+---
+description: API → services → repositories; schema isolation; DI and get_*_service
+alwaysApply: true
+---
+
+# Architecture Layers
+
+- **API layer** uses only business services via `Depends(get_*_service)`. No direct repository or schema access.
+- **Business services** use only the repository layer (session + repo methods). No raw SQL or schema types in service code.
+- **Repositories** own schema. Public repo methods return **Pydantic models**. Convert schema → Pydantic inside the repository; business layer never imports schema classes.
+
+## Services
+
+- Business services extend `BaseBusinessService`; infra services extend `BaseInfraService`.
+- Singleton via `get_instance()`. Each service has a `get_*_service()` that returns that singleton (used in `Depends(get_*_service)` and in init/close lists).
+- Override `_initialize_service()` and `_close_service()` for setup/teardown. Use `get_postgres_service()` (or other infra getters) and construct repositories with the session factory there.
+
+## Repositories
+
+- Postgres repos extend `BasePostgresRepository[SchemaType]`, accept optional `session_factory`.
+- Return Pydantic from methods like `get_default()`, `get_by_id()`; do schema-to-model conversion inside the repo (e.g. `_schema_to_foo(row)`).
+
+## DI
+
+- Modules in `src/di/modules/`: Config, Infra, Repository, BusinessServices. Use `configure_container()` at startup; `initialize_all_services()` / `close_all_services()` for lifecycle.
+- API: `SomeService = Depends(get_some_service)`.

@@ -1,0 +1,22 @@
+---
+description: Python coding standards and logging — no emojis, imports, fail-fast, tests
+alwaysApply: true
+---
+
+# Python Standards
+
+- **No emojis.** Use `[OK]`, `[ERROR]`, `[WARNING]`, `[INFO]` in logs and messages.
+- **Imports:** All at top of file. Absolute only from `src.`; no star imports. No forward references or `TYPE_CHECKING`; restructure to avoid circular imports.
+- **Service imports:** Import service class and getter from the service file, not from `__init__.py`.
+  - Correct: `from src.business_services.bridge_config_service import BridgeConfigService, get_bridge_config_service`
+  - Wrong: `from src.business_services import get_bridge_config_service`
+- **Fail-fast:** Use strong typing and `isinstance()` checks. No defensive `hasattr()`. Raise immediately if type or field is wrong.
+- **Enums:** Class name ends with `Type`; Pydantic enum fields use `_type` suffix.
+- **Tests:** Only under `tests/`. Use `tests/verify/` for feature validation (assert status and shape; exit 0/non-zero). See **tests-verify.mdc**.
+- **Migrations:** Alembic manually; create in `postgres_migrations/versions/`. When adding or changing a schema class, update `postgres_migrations/env.py` so the schema is imported (Alembic autogenerate can see it). Do not automate migration creation. See **migrations-and-env.mdc**.
+
+## Logging
+
+- Use `from src.logging import get_logger`.
+- In a **class** (e.g. service): `self.logger = get_logger()` in `__init__`; then `self.logger.info("Created MyService")` etc.
+- In a **standalone module** (no base class): `logger = get_logger()` at module level; then `logger.info("...")`.
