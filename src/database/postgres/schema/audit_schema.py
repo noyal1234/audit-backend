@@ -1,6 +1,6 @@
 from src.database.base import Base
-from sqlalchemy import String, DateTime, Date, ForeignKey, Boolean, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String, DateTime, Date, ForeignKey, Boolean, Text, UniqueConstraint, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from uuid import uuid4
 
 
@@ -8,6 +8,9 @@ class AuditSchema(Base):
     """Audit run per facility per shift."""
 
     __tablename__ = "audit"
+    __table_args__ = (
+        UniqueConstraint("facility_id", "shift_type", "shift_date", name="uq_audit_facility_shift"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
     facility_id: Mapped[str] = mapped_column(String(36), ForeignKey("facility.id"), nullable=False, index=True)
@@ -19,19 +22,52 @@ class AuditSchema(Base):
     updated_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     finalized_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    audit_checkpoints: Mapped[list["AuditCheckpointSchema"]] = relationship(
+        "AuditCheckpointSchema", back_populates="audit", cascade="all, delete-orphan"
+    )
 
-class AuditCheckpointResultSchema(Base):
-    """Per-checkpoint result within an audit."""
 
-    __tablename__ = "audit_checkpoint_result"
+class AuditCheckpointSchema(Base):
+    """Snapshot of a checkpoint at audit creation time."""
+
+    __tablename__ = "audit_checkpoint"
+    __table_args__ = (
+        UniqueConstraint("audit_id", "checkpoint_id", name="uq_audit_checkpoint"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    audit_id: Mapped[str] = mapped_column(String(36), ForeignKey("audit.id"), nullable=False, index=True)
-    checkpoint_id: Mapped[str] = mapped_column(String(36), ForeignKey("checkpoint.id"), nullable=False, index=True)
-    compliant: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    manual_override: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    image_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    ai_status_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    ai_result: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    audit_id: Mapped[str] = mapped_column(String(36), ForeignKey("audit.id", ondelete="CASCADE"), nullable=False, index=True)
+    checkpoint_id: Mapped[str] = mapped_column(String(36), ForeignKey("checkpoint.id"), nullable=False)
+    checkpoint_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    image_url: Mapped[str] = mapped_column(String(512), nullable=False, server_default="")
+    status_type: Mapped[str] = mapped_column(String(50), nullable=False, server_default="PENDING")
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    audit: Mapped["AuditSchema"] = relationship("AuditSchema", back_populates="audit_checkpoints")
+    categories: Mapped[list["AuditCheckpointCategorySchema"]] = relationship(
+        "AuditCheckpointCategorySchema", back_populates="audit_checkpoint", cascade="all, delete-orphan"
+    )
+
+
+class AuditCheckpointCategorySchema(Base):
+    """Tracks category-level completion within an audit checkpoint."""
+
+    __tablename__ = "audit_checkpoint_category"
+    __table_args__ = (
+        UniqueConstraint("audit_checkpoint_id", "category_id", name="uq_audit_checkpoint_category"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    audit_checkpoint_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("audit_checkpoint.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    category_id: Mapped[str] = mapped_column(String(36), ForeignKey("category.id"), nullable=False)
+    category_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    completed_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("user.id"), nullable=True)
+    completed_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    audit_checkpoint: Mapped["AuditCheckpointSchema"] = relationship(
+        "AuditCheckpointSchema", back_populates="categories"
+    )

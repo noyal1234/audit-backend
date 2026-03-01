@@ -1,30 +1,26 @@
-"""Audit execution: create, list, get, record checkpoint, upload image, finalize, reopen."""
+"""Audit execution: current (lazy), list, get, progress, complete/uncomplete category, finalize, reopen."""
 
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi import APIRouter, Depends, status
 
-from src.business_services.media_service import get_media_service
-
-from src.api.dependencies import RequireEmployee, get_current_user_payload
+from src.api.dependencies import RequireDealership, RequireEmployee
 from src.business_services.audit_service import get_audit_service
-from src.business_services.media_service import get_media_service
-from src.database.repositories.schemas.audit_schema import AuditCreate, CheckpointResultCreate
+from src.database.repositories.schemas.audit_schema import CategoryCompleteRequest
 from src.exceptions.domain_exceptions import NotFoundError
 from src.utils.pagination import PaginationParams
 
 router = APIRouter(prefix="/audits", tags=["audits"])
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
-async def create_audit(
-    body: AuditCreate,
+@router.get("/current")
+async def get_current_audit(
     payload: Annotated[dict, RequireEmployee],
     audit_service: Annotated[any, Depends(get_audit_service)],
 ):
-    """Create audit for current shift. One per shift per facility."""
-    return await audit_service.create(body, payload["sub"], payload)
+    """Get or lazily create the audit for the current shift. Auto-snapshots all checkpoints and categories."""
+    return await audit_service.get_or_create_current_audit(payload)
 
 
 @router.get("")
@@ -60,75 +56,54 @@ async def get_audit(
     payload: Annotated[dict, RequireEmployee],
     audit_service: Annotated[any, Depends(get_audit_service)],
 ):
-    """Get audit by ID."""
+    """Get audit by ID with full snapshot detail."""
     audit = await audit_service.get_by_id(id, payload)
     if not audit:
         raise NotFoundError("Audit", id)
     return audit
 
 
-@router.post("/{audit_id}/checkpoints/{checkpoint_id}")
-async def record_checkpoint_result(
+@router.get("/{audit_id}/progress")
+async def get_audit_progress(
     audit_id: str,
-    checkpoint_id: str,
-    body: CheckpointResultCreate,
     payload: Annotated[dict, RequireEmployee],
     audit_service: Annotated[any, Depends(get_audit_service)],
 ):
-    """Record checkpoint result (compliant/non-compliant, optional manual override)."""
-    return await audit_service.record_checkpoint(audit_id, checkpoint_id, body, payload)
+    """Get audit progress: completion counts and percentage."""
+    return await audit_service.get_progress(audit_id, payload)
 
 
-@router.post("/{audit_id}/checkpoints/{checkpoint_id}/image")
-async def upload_checkpoint_image(
+@router.post("/{audit_id}/checkpoint-categories/{id}/complete")
+async def complete_category(
     audit_id: str,
-    checkpoint_id: str,
+    id: str,
     payload: Annotated[dict, RequireEmployee],
     audit_service: Annotated[any, Depends(get_audit_service)],
-    media_service: Annotated[any, Depends(get_media_service)],
-    file: UploadFile = File(...),
+    body: CategoryCompleteRequest | None = None,
 ):
-    """Upload image for checkpoint. Sets AI_PENDING; returns placeholder AI response."""
-    content = await file.read()
-    media = await media_service.save_upload(
-        audit_id,
-        checkpoint_id,
-        content,
-        file.filename or "image.jpg",
-        file.content_type,
-        payload,
-    )
-    await audit_service.upload_image_ai_status(audit_id, checkpoint_id, media.file_path, payload)
-    from src.database.repositories.schemas.ai_schema import AIResultResponse
-    return AIResultResponse(status="AI_PENDING", message="Placeholder AI result; human decision overrides.")
+    """Mark an audit checkpoint category as completed. Auto-updates checkpoint and audit status."""
+    data = body or CategoryCompleteRequest()
+    return await audit_service.complete_category(audit_id, id, data, payload)
 
 
-@router.get("/{audit_id}/checkpoints/{checkpoint_id}/ai-result")
-async def get_ai_result(
+@router.post("/{audit_id}/checkpoint-categories/{id}/uncomplete")
+async def uncomplete_category(
     audit_id: str,
-    checkpoint_id: str,
+    id: str,
     payload: Annotated[dict, RequireEmployee],
     audit_service: Annotated[any, Depends(get_audit_service)],
 ):
-    """Get AI result for checkpoint (placeholder)."""
-    result = await audit_service.get_ai_result(audit_id, checkpoint_id, payload)
-    if not result:
-        raise NotFoundError("Checkpoint result", f"{audit_id}/{checkpoint_id}")
-    from src.database.repositories.schemas.ai_schema import AIResultResponse
-    return AIResultResponse(
-        status=result.ai_status_type or "AI_PENDING",
-        compliant=result.compliant,
-        message="Human decision overrides AI.",
-    )
+    """Unmark an audit checkpoint category. Reverses completion."""
+    return await audit_service.uncomplete_category(audit_id, id, payload)
 
 
 @router.patch("/{id}/finalize")
 async def finalize_audit(
     id: str,
-    payload: Annotated[dict, RequireEmployee],
+    payload: Annotated[dict, RequireDealership],
     audit_service: Annotated[any, Depends(get_audit_service)],
 ):
-    """Finalize audit. Immutable after this."""
+    """Finalize audit. Immutable after this. DEALERSHIP+ required."""
     audit = await audit_service.finalize(id, payload)
     if not audit:
         raise NotFoundError("Audit", id)
@@ -138,21 +113,11 @@ async def finalize_audit(
 @router.patch("/{id}/reopen")
 async def reopen_audit(
     id: str,
-    payload: Annotated[dict, RequireEmployee],
+    payload: Annotated[dict, RequireDealership],
     audit_service: Annotated[any, Depends(get_audit_service)],
 ):
-    """Reopen audit (Admin only)."""
+    """Reopen a COMPLETED audit. DEALERSHIP+ required. FINALIZED requires SUPER_ADMIN."""
     audit = await audit_service.reopen(id, payload)
     if not audit:
         raise NotFoundError("Audit", id)
     return audit
-
-
-@router.get("/{audit_id}/images")
-async def get_audit_images(
-    audit_id: str,
-    payload: Annotated[dict, RequireEmployee],
-    media_service: Annotated[any, Depends(get_media_service)],
-):
-    """Get images for an audit."""
-    return await media_service.list_audit_images(audit_id, payload)

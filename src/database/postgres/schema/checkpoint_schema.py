@@ -1,20 +1,24 @@
 from src.database.base import Base
-from sqlalchemy import String, DateTime, ForeignKey, Text, Boolean, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String, DateTime, ForeignKey, UniqueConstraint, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from uuid import uuid4
 
 
 class CheckpointSchema(Base):
-    """Checkpoint (facility-specific)."""
+    """Facility-scoped checkpoint (area inside a dealership)."""
 
     __tablename__ = "checkpoint"
+    __table_args__ = (
+        UniqueConstraint("facility_id", "name", name="uq_checkpoint_facility_name"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
-    subcategory_id: Mapped[str] = mapped_column(String(36), ForeignKey("subcategory.id"), nullable=False, index=True)
-    facility_id: Mapped[str] = mapped_column(String(36), ForeignKey("facility.id"), nullable=False, index=True)
+    facility_id: Mapped[str] = mapped_column(String(36), ForeignKey("facility.id", ondelete="CASCADE"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    requires_photo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    image_url: Mapped[str] = mapped_column(String(512), nullable=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    category_links: Mapped[list["CheckpointCategorySchema"]] = relationship(
+        "CheckpointCategorySchema", back_populates="checkpoint", cascade="all, delete-orphan"
+    )

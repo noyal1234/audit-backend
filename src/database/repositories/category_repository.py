@@ -23,21 +23,36 @@ class CategoryRepository(BasePostgresRepository[CategorySchema]):
         row = await self._get_by_id_raw(id)
         return self._schema_to_category(row) if row else None
 
+    async def get_by_facility_and_name(self, facility_id: str, name: str) -> CategoryResponse | None:
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(CategorySchema).where(
+                    CategorySchema.facility_id == facility_id,
+                    CategorySchema.name == name,
+                )
+            )
+            row = result.scalar_one_or_none()
+        return self._schema_to_category(row) if row else None
+
     async def list_categories(
         self,
         *,
+        facility_id: str | None = None,
         offset: int = 0,
         limit: int = 20,
         sort: str = "created_at",
         order: str = "desc",
     ) -> tuple[list[CategoryResponse], int]:
         async with self._session_factory() as session:
+            q = select(CategorySchema)
             count_q = select(func.count()).select_from(CategorySchema)
+            if facility_id:
+                q = q.where(CategorySchema.facility_id == facility_id)
+                count_q = count_q.where(CategorySchema.facility_id == facility_id)
             total = (await session.execute(count_q)).scalar() or 0
             order_col = getattr(CategorySchema, sort, CategorySchema.created_at)
-            q = select(CategorySchema).order_by(
-                order_col.desc() if order == "desc" else order_col.asc()
-            ).offset(offset).limit(limit)
+            q = q.order_by(order_col.desc() if order == "desc" else order_col.asc())
+            q = q.offset(offset).limit(limit)
             result = await session.execute(q)
             rows = result.scalars().all()
         return [self._schema_to_category(r) for r in rows], total
@@ -46,6 +61,7 @@ class CategoryRepository(BasePostgresRepository[CategorySchema]):
         async with self._session_factory() as session:
             row = CategorySchema(
                 id=str(uuid4()),
+                facility_id=data.facility_id,
                 name=data.name,
                 description=data.description,
             )

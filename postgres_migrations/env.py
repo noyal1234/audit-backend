@@ -9,9 +9,10 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from src.database.base import Base
 from src.database.postgres.schema.auth_session_schema import AuthSessionSchema  # noqa: F401
-from src.database.postgres.schema.audit_schema import AuditCheckpointResultSchema, AuditSchema  # noqa: F401
-from src.database.postgres.schema.category_schema import CategorySchema, SubcategorySchema  # noqa: F401
+from src.database.postgres.schema.audit_schema import AuditCheckpointCategorySchema, AuditCheckpointSchema, AuditSchema  # noqa: F401
+from src.database.postgres.schema.category_schema import CategorySchema  # noqa: F401
 from src.database.postgres.schema.checkpoint_schema import CheckpointSchema  # noqa: F401
+from src.database.postgres.schema.checkpoint_category_schema import CheckpointCategorySchema  # noqa: F401
 from src.database.postgres.schema.country_schema import CountrySchema  # noqa: F401
 from src.database.postgres.schema.facility_schema import FacilitySchema  # noqa: F401
 from src.database.postgres.schema.media_schema import MediaEvidenceSchema  # noqa: F401
@@ -38,7 +39,6 @@ def get_url() -> str:
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode (generate SQL only)."""
     url = get_url().replace("+asyncpg", "")
     context.configure(url=url, target_metadata=target_metadata, literal_binds=True)
     with context.begin_transaction():
@@ -65,7 +65,6 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode (async)."""
     asyncio.run(run_async_migrations())
 
 

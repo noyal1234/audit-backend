@@ -59,7 +59,9 @@ Production-grade FastAPI backend for multi-tenant, hierarchical compliance: RBAC
 - **Zones:** `POST/GET/PATCH/DELETE /zones`
 - **Dealerships:** `POST/GET/PATCH/DELETE /dealerships`
 - **Employees:** `POST/GET/PATCH/DELETE /employees`
-- **Audit checklist:** `/audit/categories`, `/audit/subcategories`, `/audit/checkpoints`
+- **Categories:** `POST/GET/PATCH/DELETE /categories` (facility-scoped)
+- **Checkpoints:** `POST/GET/PATCH/DELETE /checkpoints` (facility-scoped, image required on create)
+- **Checkpoint-Categories:** `POST/GET/DELETE /checkpoints/{id}/categories` (many-to-many)
 - **Shifts:** `GET /shifts/current`, `GET /shifts/config`
 - **Audits:** `POST/GET /audits`, checkpoint result, image upload, finalize, reopen
 - **Analytics:** `/analytics/country-summary`, `/zone-summary`, `/facility-summary`, etc.
