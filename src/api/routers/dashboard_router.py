@@ -1,4 +1,4 @@
-"""Analytics endpoints. Aggregated queries, chart-friendly JSON."""
+"""Analytics endpoints. Real aggregate queries from snapshot-based audit model."""
 
 from datetime import date
 from typing import Annotated
@@ -21,10 +21,9 @@ async def country_summary(
     date_to: date | None = None,
     shift_type: str | None = None,
 ):
-    """Country-level summary: total audits, compliance %, monthly trend. STELLANTIS_ADMIN scoped by country_id."""
-    country_id = payload.get("country_id") if payload.get("role_type") == "STELLANTIS_ADMIN" else None
+    """Country-level summary: total audits, facilities, completion counts, compliance %, monthly trend."""
     return await dashboard_service.country_summary(
-        payload, country_id=country_id, zone_id=zone_id, facility_id=facility_id,
+        payload, zone_id=zone_id, facility_id=facility_id,
         date_from=date_from, date_to=date_to, shift_type=shift_type,
     )
 
@@ -38,7 +37,7 @@ async def zone_summary(
     date_to: date | None = None,
     shift_type: str | None = None,
 ):
-    """Zone summary: facility ranking, compliance %, audit count."""
+    """Zone summary: audit count, compliance %, facility ranking by compliance."""
     return await dashboard_service.zone_summary(
         payload, zone_id=zone_id,
         date_from=date_from, date_to=date_to, shift_type=shift_type,
@@ -54,7 +53,7 @@ async def facility_summary(
     date_to: date | None = None,
     shift_type: str | None = None,
 ):
-    """Facility summary: shift performance, category compliance, failure rate."""
+    """Facility summary: shift performance, category compliance, failure rate per checkpoint."""
     return await dashboard_service.facility_summary(
         payload, facility_id=facility_id,
         date_from=date_from, date_to=date_to, shift_type=shift_type,
@@ -67,11 +66,16 @@ async def audit_trends(
     dashboard_service: Annotated[any, Depends(get_dashboard_service)],
     zone_id: str | None = None,
     facility_id: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    shift_type: str | None = None,
     period: str = "monthly",
 ):
-    """Audit trends. Period: daily or monthly."""
-    from src.database.repositories.schemas.dashboard_schema import AuditTrendsResponse
-    return AuditTrendsResponse(period=period, data=[])
+    """Audit compliance trends. Period: daily, weekly, or monthly."""
+    return await dashboard_service.trends(
+        payload, period=period, zone_id=zone_id, facility_id=facility_id,
+        date_from=date_from, date_to=date_to, shift_type=shift_type,
+    )
 
 
 @router.get("/category-breakdown")
@@ -82,11 +86,12 @@ async def category_breakdown(
     facility_id: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    shift_type: str | None = None,
 ):
-    """Category compliance breakdown."""
+    """Category compliance breakdown across all audits."""
     return await dashboard_service.category_breakdown(
         payload, zone_id=zone_id, facility_id=facility_id,
-        date_from=date_from, date_to=date_to,
+        date_from=date_from, date_to=date_to, shift_type=shift_type,
     )
 
 
@@ -98,9 +103,11 @@ async def top_issues(
     facility_id: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    shift_type: str | None = None,
+    limit: int = 10,
 ):
-    """Top non-compliant checkpoints."""
+    """Top non-completed checkpoint+category combinations by failure count."""
     return await dashboard_service.top_issues(
         payload, zone_id=zone_id, facility_id=facility_id,
-        date_from=date_from, date_to=date_to,
+        date_from=date_from, date_to=date_to, shift_type=shift_type, limit=limit,
     )
