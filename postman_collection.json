@@ -1100,7 +1100,28 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{baseUrl}}/analytics/country-summary", "host": ["{{baseUrl}}"], "path": ["analytics", "country-summary"] }
+            "url": {
+              "raw": "{{baseUrl}}/analytics/country-summary?date_from=2026-01-01&date_to=2026-12-31",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "country-summary"],
+              "query": [
+                { "key": "date_from", "value": "2026-01-01" },
+                { "key": "date_to", "value": "2026-12-31" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Country Summary (filtered by zone)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/country-summary?zone_id={{zoneId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "country-summary"],
+              "query": [{ "key": "zone_id", "value": "{{zoneId}}" }]
+            }
           }
         },
         {
@@ -1143,11 +1164,32 @@
           }
         },
         {
+          "name": "Trends (Daily)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/analytics/trends?period=daily&facility_id={{dealershipId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "trends"],
+              "query": [
+                { "key": "period", "value": "daily" },
+                { "key": "facility_id", "value": "{{dealershipId}}" }
+              ]
+            }
+          }
+        },
+        {
           "name": "Category Breakdown",
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{baseUrl}}/analytics/category-breakdown", "host": ["{{baseUrl}}"], "path": ["analytics", "category-breakdown"] }
+            "url": {
+              "raw": "{{baseUrl}}/analytics/category-breakdown?facility_id={{dealershipId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "category-breakdown"],
+              "query": [{ "key": "facility_id", "value": "{{dealershipId}}" }]
+            }
           }
         },
         {
@@ -1155,7 +1197,12 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{baseUrl}}/analytics/top-issues", "host": ["{{baseUrl}}"], "path": ["analytics", "top-issues"] }
+            "url": {
+              "raw": "{{baseUrl}}/analytics/top-issues?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["analytics", "top-issues"],
+              "query": [{ "key": "limit", "value": "10" }]
+            }
           }
         }
       ]
