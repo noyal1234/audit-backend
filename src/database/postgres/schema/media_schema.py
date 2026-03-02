@@ -32,5 +32,6 @@ class MediaEvidenceSchema(Base):
 
     audit_checkpoint_category: Mapped["AuditCheckpointCategorySchema"] = relationship(  # type: ignore[name-defined]  # noqa: F821
         "AuditCheckpointCategorySchema",
-        back_populates="media",
+        foreign_keys=[audit_checkpoint_category_id],
+        back_populates="media_items",
     )

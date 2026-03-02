@@ -99,6 +99,7 @@ class MediaService(BaseBusinessService):
         asyncio.create_task(
             self._run_ai_analysis(
                 media_id=media_row.id,
+                audit_checkpoint_category_id=audit_checkpoint_category_id,
                 image_path=str(path),
                 checkpoint_name=audit_cp.checkpoint_name,
                 reference_image_path=audit_cp.image_url,
@@ -114,6 +115,7 @@ class MediaService(BaseBusinessService):
         self,
         *,
         media_id: str,
+        audit_checkpoint_category_id: str,
         image_path: str,
         checkpoint_name: str,
         reference_image_path: str,
@@ -122,14 +124,16 @@ class MediaService(BaseBusinessService):
         shift_type: str,
         shift_date: str,
     ) -> None:
-        """Background coroutine: fetch category description, call AI, persist result."""
+        """Background coroutine: fetch category description, call AI, persist to media + category snapshot."""
         self.logger.info("[AI] Background analysis started for media %s (%s)", media_id, category_name)
+        if self._media_repo is None or self._audit_category_repo is None:
+            return
         try:
             from src.business_services.ai_service import get_ai_service
             from src.database.postgres.schema.category_schema import CategorySchema
             from sqlalchemy import select
 
-            if self._session_factory is None or self._media_repo is None:
+            if self._session_factory is None:
                 return
 
             # Fetch live category description (snapshot stores only name, not description)
@@ -162,9 +166,32 @@ class MediaService(BaseBusinessService):
                 ai_summary=result.summary,
                 ai_analyzed_at=result.analyzed_at,
             )
+            await self._audit_category_repo.update_ai_snapshot(
+                audit_checkpoint_category_id,
+                ai_latest_media_id=media_id,
+                ai_status=result.status,
+                ai_compliant=result.compliant,
+                ai_summary=result.summary,
+            )
             self.logger.info("[AI] Analysis %s for media %s", result.status, media_id)
         except Exception as exc:  # noqa: BLE001
             self.logger.error("[AI] Background analysis error for media %s: %s", media_id, exc)
+            await self._media_repo.update_ai_result(
+                media_id,
+                ai_status="FAILED",
+                ai_compliant=None,
+                ai_confidence=None,
+                ai_observations=None,
+                ai_summary=None,
+                ai_analyzed_at=None,
+            )
+            await self._audit_category_repo.update_ai_snapshot(
+                audit_checkpoint_category_id,
+                ai_latest_media_id=media_id,
+                ai_status="FAILED",
+                ai_compliant=None,
+                ai_summary=None,
+            )
 
     async def get_image_ai_result(self, image_id: str, payload: dict) -> MediaEvidenceResponse | None:
         """Return the current AI analysis state for a specific uploaded image."""

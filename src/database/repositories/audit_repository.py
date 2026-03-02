@@ -357,6 +357,32 @@ class AuditCheckpointCategoryRepository:
             await session.refresh(row)
             return AuditCheckpointCategoryResponse.model_validate(row)
 
+    async def update_ai_snapshot(
+        self,
+        audit_checkpoint_category_id: str,
+        *,
+        ai_latest_media_id: str,
+        ai_status: str,
+        ai_compliant: bool | None,
+        ai_summary: str | None,
+    ) -> bool:
+        """Update the category-level AI snapshot (latest media + state). Returns True if category found."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(AuditCheckpointCategorySchema).where(
+                    AuditCheckpointCategorySchema.id == audit_checkpoint_category_id
+                )
+            )
+            row = result.scalar_one_or_none()
+            if not row:
+                return False
+            row.ai_latest_media_id = ai_latest_media_id
+            row.ai_status = ai_status
+            row.ai_compliant = ai_compliant
+            row.ai_summary = ai_summary
+            await session.commit()
+            return True
+
     async def update_checkpoint_status(self, audit_checkpoint_id: str) -> str:
         """Recompute checkpoint status based on its categories. Returns new status."""
         async with self._session_factory() as session:

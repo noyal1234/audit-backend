@@ -34,6 +34,10 @@ class AuditCheckpointCategoryResponse(BaseModel):
     completed_by: str | None
     completed_at: datetime | None
     remarks: str | None
+    ai_status: str | None = None
+    ai_compliant: bool | None = None
+    ai_summary: str | None = None
+    ai_latest_media_id: str | None = None
 
     model_config = {"from_attributes": True}
 
