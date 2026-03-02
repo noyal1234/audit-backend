@@ -71,3 +71,8 @@ class AuditCheckpointCategorySchema(Base):
     audit_checkpoint: Mapped["AuditCheckpointSchema"] = relationship(
         "AuditCheckpointSchema", back_populates="categories"
     )
+    media: Mapped[list["MediaEvidenceSchema"]] = relationship(  # type: ignore[name-defined]  # noqa: F821
+        "MediaEvidenceSchema",
+        back_populates="audit_checkpoint_category",
+        cascade="all, delete-orphan",
+    )

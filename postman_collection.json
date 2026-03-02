@@ -1089,6 +1089,30 @@
             "header": [],
             "url": { "raw": "{{baseUrl}}/audits/{{auditId}}/reopen", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}", "reopen"] }
           }
+        },
+        {
+          "name": "Delete Audit",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/audits/{{auditId}}", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}"] }
+          }
+        },
+        {
+          "name": "Rebuild Audit",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/audits/{{auditId}}/rebuild", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}", "rebuild"] }
+          }
+        },
+        {
+          "name": "Get AI Compliance Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/audits/{{auditId}}/report", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}", "report"] }
+          }
         }
       ]
     },
@@ -1316,6 +1340,14 @@
     {
       "name": "Media",
       "item": [
+        {
+          "name": "Get Image AI Result",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/images/{{imageId}}/ai-result", "host": ["{{baseUrl}}"], "path": ["images", "{{imageId}}", "ai-result"] }
+          }
+        },
         {
           "name": "Delete Image",
           "request": {

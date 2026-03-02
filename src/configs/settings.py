@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     # CORS (comma-separated origins, or "*" for all)
     cors_origins: str = Field(default="*", description="Allowed CORS origins")
 
+    # LiteLLM proxy (AI image analysis & report generation)
+    litellm_api_key: str = Field(default="", description="LiteLLM proxy API key")
+    litellm_base_url: str = Field(default="https://litellm.tarento.dev", description="LiteLLM proxy base URL")
+    litellm_vision_model: str = Field(default="gemini-flash", description="Model for per-image analysis")
+    litellm_report_model: str = Field(default="gemini-pro", description="Model for full audit report generation")
+
     model_config = {"env_prefix": "APP_", "extra": "ignore", "env_file": ".env"}
 
 

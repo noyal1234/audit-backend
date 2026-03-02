@@ -71,6 +71,11 @@ class CategoryCompleteRequest(BaseModel):
     remarks: str | None = None
 
 
+class CategoryRemarksUpdate(BaseModel):
+    """Update only the remarks (review text) for a category result. Does not change completion state."""
+    remarks: str | None = None
+
+
 class AuditProgressResponse(BaseModel):
     audit_id: str
     status_type: str

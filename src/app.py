@@ -37,6 +37,7 @@ async def lifespan(app: FastAPI):
     from src.business_services.staff_service import get_staff_service
     from src.business_services.template_service import get_template_service
     from src.business_services.user_service import get_user_service
+    from src.business_services.report_service import get_report_service
     for getter in [
         get_auth_service,
         get_user_service,
@@ -49,9 +50,12 @@ async def lifespan(app: FastAPI):
         get_audit_service,
         get_dashboard_service,
         get_media_service,
+        get_report_service,
     ]:
         container.register_business_service(getter())
     container.initialize_all_services()
+    shift_svc = get_shift_service()
+    await shift_svc.ensure_default_shifts()
     yield
     container.close_all_services()
 

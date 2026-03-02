@@ -197,6 +197,17 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
             row = result.scalar_one()
         return self._schema_to_detail(row)
 
+    async def delete(self, audit_id: str) -> bool:
+        """Delete audit by id. Cascade removes audit_checkpoint and audit_checkpoint_category. Returns False if not found."""
+        async with self._session_factory() as session:
+            result = await session.execute(select(AuditSchema).where(AuditSchema.id == audit_id))
+            row = result.scalar_one_or_none()
+            if not row:
+                return False
+            await session.delete(row)
+            await session.commit()
+            return True
+
     async def update_status(self, id: str, status_type: str, finalized_at: datetime | None = None) -> AuditResponse | None:
         async with self._session_factory() as session:
             result = await session.execute(select(AuditSchema).where(AuditSchema.id == id))
@@ -254,6 +265,29 @@ class AuditCheckpointCategoryRepository:
             row = result.scalar_one_or_none()
         return AuditCheckpointCategoryResponse.model_validate(row) if row else None
 
+    async def get_audit_checkpoint_for_category(self, category_id: str) -> AuditCheckpointResponse | None:
+        """Return the audit checkpoint snapshot that owns this category (for ownership checks and AI context)."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(AuditCheckpointCategorySchema)
+                .options(selectinload(AuditCheckpointCategorySchema.audit_checkpoint))
+                .where(AuditCheckpointCategorySchema.id == category_id)
+            )
+            cat_row = result.scalar_one_or_none()
+            if not cat_row or not cat_row.audit_checkpoint:
+                return None
+            cp = cat_row.audit_checkpoint
+        return AuditCheckpointResponse(
+            id=cp.id,
+            audit_id=cp.audit_id,
+            checkpoint_id=cp.checkpoint_id,
+            checkpoint_name=cp.checkpoint_name,
+            image_url=cp.image_url,
+            status_type=cp.status_type,
+            created_at=cp.created_at,
+            categories=[],
+        )
+
     async def get_with_checkpoint(self, id: str) -> tuple[AuditCheckpointCategorySchema | None, AuditCheckpointSchema | None]:
         """Return both the category row and its parent checkpoint (for status computation)."""
         async with self._session_factory() as session:
@@ -305,6 +339,20 @@ class AuditCheckpointCategoryRepository:
             row.completed_by = None
             row.completed_at = None
             row.remarks = None
+            await session.commit()
+            await session.refresh(row)
+            return AuditCheckpointCategoryResponse.model_validate(row)
+
+    async def update_remarks(self, id: str, remarks: str | None) -> AuditCheckpointCategoryResponse | None:
+        """Update only the remarks field. Does not change is_completed or completed_by/completed_at."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(AuditCheckpointCategorySchema).where(AuditCheckpointCategorySchema.id == id)
+            )
+            row = result.scalar_one_or_none()
+            if not row:
+                return None
+            row.remarks = remarks
             await session.commit()
             await session.refresh(row)
             return AuditCheckpointCategoryResponse.model_validate(row)

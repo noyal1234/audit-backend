@@ -5,6 +5,12 @@ from datetime import datetime, time
 from pydantic import BaseModel, Field
 
 
+class ShiftConfigCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=50)
+    start_time: time
+    end_time: time
+
+
 class ShiftConfigUpdate(BaseModel):
     name: str | None = Field(None, max_length=50)
     start_time: time | None = None
