@@ -37,9 +37,10 @@ You will receive:
 Respond ONLY with valid JSON in this exact structure (no markdown, no extra text):
 {
   "compliant": true | false,
+  "complaince score": <float between 0.0 and 100.0>,
   "confidence": <float between 0.0 and 1.0>,
   "observations": "<2-4 concise bullet points separated by newlines, each starting with '• '>",
-  "summary": "<one clear sentence verdict in 50 words or less>"
+  "summary": "<one clear sentence verdict in 50 words or less>",
 }"""
 
 
