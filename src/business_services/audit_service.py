@@ -14,6 +14,7 @@ from src.database.repositories.schemas.audit_schema import (
     AuditProgressResponse,
     AuditResponse,
     CategoryCompleteRequest,
+    CategoryRemarksUpdate,
 )
 from src.business_services.base import BaseBusinessService
 from src.business_services.shift_service import get_shift_service
@@ -257,6 +258,34 @@ class AuditService(BaseBusinessService):
 
         await self._category_result_repo.update_checkpoint_status(cp_row.id)
         await self._category_result_repo.recompute_audit_status(audit_id)
+        return result
+
+    async def update_category_remarks(
+        self,
+        audit_id: str,
+        category_result_id: str,
+        data: CategoryRemarksUpdate,
+        payload: dict,
+    ) -> AuditCheckpointCategoryResponse:
+        """Update only the remarks (review text) for a category. Does not change completion state."""
+        self._require_initialized()
+        audit = await self._audit_repo.get_by_id(audit_id)
+        if not audit:
+            raise NotFoundError("Audit", audit_id)
+        if audit.status_type not in EDITABLE_STATUSES:
+            raise ConflictError(f"Cannot modify audit in {audit.status_type} state")
+        require_facility_access(audit.facility_id, payload)
+        await self._ensure_facility_in_country(audit.facility_id, payload)
+
+        cat_row, cp_row = await self._category_result_repo.get_with_checkpoint(category_result_id)
+        if not cat_row or not cp_row:
+            raise NotFoundError("AuditCheckpointCategory", category_result_id)
+        if cp_row.audit_id != audit_id:
+            raise NotFoundError("AuditCheckpointCategory", category_result_id)
+
+        result = await self._category_result_repo.update_remarks(category_result_id, data.remarks)
+        if not result:
+            raise NotFoundError("AuditCheckpointCategory", category_result_id)
         return result
 
     # --- Finalize / Reopen ---

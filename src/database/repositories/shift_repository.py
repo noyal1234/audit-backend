@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from src.database.postgres.schema.shift_schema import ShiftConfigSchema
 from src.database.repositories.base_repository import BasePostgresRepository
 from src.database.repositories.schemas.shift_schema import (
+    ShiftConfigCreate,
     ShiftConfigResponse,
     ShiftConfigUpdate,
 )
@@ -28,6 +29,19 @@ class ShiftRepository(BasePostgresRepository[ShiftConfigSchema]):
             rows = result.scalars().all()
         return [self._schema_to_shift(r) for r in rows]
 
+    async def create(self, data: ShiftConfigCreate) -> ShiftConfigResponse:
+        async with self._session_factory() as session:
+            row = ShiftConfigSchema(
+                id=str(uuid4()),
+                name=data.name,
+                start_time=data.start_time,
+                end_time=data.end_time,
+            )
+            session.add(row)
+            await session.commit()
+            await session.refresh(row)
+            return self._schema_to_shift(row)
+
     async def update(self, id: str, data: ShiftConfigUpdate) -> ShiftConfigResponse | None:
         async with self._session_factory() as session:
             result = await session.execute(select(ShiftConfigSchema).where(ShiftConfigSchema.id == id))
@@ -43,3 +57,13 @@ class ShiftRepository(BasePostgresRepository[ShiftConfigSchema]):
             await session.commit()
             await session.refresh(row)
             return self._schema_to_shift(row)
+
+    async def delete(self, id: str) -> bool:
+        async with self._session_factory() as session:
+            result = await session.execute(select(ShiftConfigSchema).where(ShiftConfigSchema.id == id))
+            row = result.scalar_one_or_none()
+            if not row:
+                return False
+            await session.delete(row)
+            await session.commit()
+            return True

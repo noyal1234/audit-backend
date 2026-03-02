@@ -309,6 +309,20 @@ class AuditCheckpointCategoryRepository:
             await session.refresh(row)
             return AuditCheckpointCategoryResponse.model_validate(row)
 
+    async def update_remarks(self, id: str, remarks: str | None) -> AuditCheckpointCategoryResponse | None:
+        """Update only the remarks field. Does not change is_completed or completed_by/completed_at."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(AuditCheckpointCategorySchema).where(AuditCheckpointCategorySchema.id == id)
+            )
+            row = result.scalar_one_or_none()
+            if not row:
+                return None
+            row.remarks = remarks
+            await session.commit()
+            await session.refresh(row)
+            return AuditCheckpointCategoryResponse.model_validate(row)
+
     async def update_checkpoint_status(self, audit_checkpoint_id: str) -> str:
         """Recompute checkpoint status based on its categories. Returns new status."""
         async with self._session_factory() as session:

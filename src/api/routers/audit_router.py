@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, status
 from src.api.dependencies import RequireDealership, RequireEmployee
 from src.business_services.audit_service import get_audit_service
 from src.business_services.report_service import get_report_service
-from src.database.repositories.schemas.audit_schema import CategoryCompleteRequest
+from src.database.repositories.schemas.audit_schema import CategoryCompleteRequest, CategoryRemarksUpdate
 from src.exceptions.domain_exceptions import NotFoundError
 from src.utils.pagination import PaginationParams
 
@@ -96,6 +96,18 @@ async def uncomplete_category(
 ):
     """Unmark an audit checkpoint category. Reverses completion."""
     return await audit_service.uncomplete_category(audit_id, id, payload)
+
+
+@router.patch("/{audit_id}/checkpoint-categories/{id}")
+async def update_category_remarks(
+    audit_id: str,
+    id: str,
+    body: CategoryRemarksUpdate,
+    payload: Annotated[dict, RequireEmployee],
+    audit_service: Annotated[any, Depends(get_audit_service)],
+):
+    """Update the remarks (review text) for a category. Does not change completion state. Use when audit is PENDING, IN_PROGRESS, or REOPENED."""
+    return await audit_service.update_category_remarks(audit_id, id, body, payload)
 
 
 @router.patch("/{id}/finalize")

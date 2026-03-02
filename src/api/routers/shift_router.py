@@ -1,10 +1,10 @@
-"""Shift: current shift, config, history."""
+"""Shift: current shift, config CRUD. SUPER_ADMIN for mutations, EMPLOYEE+ for reads."""
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 
-from src.api.dependencies import RequireEmployee, RequireStellantisAdmin
+from src.api.dependencies import RequireEmployee, RequireSuperAdmin
 from src.business_services.shift_service import get_shift_service
 from src.database.repositories.schemas.shift_schema import ShiftConfigUpdate
 
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/shifts", tags=["shifts"])
 async def get_current_shift(
     shift_service: Annotated[any, Depends(get_shift_service)],
 ):
-    """Get current shift (and whether we are in it)."""
+    """Get current active shift."""
     return await shift_service.get_current_shift()
 
 
@@ -32,18 +32,18 @@ async def get_shift_config(
 async def update_shift_config(
     id: str,
     body: ShiftConfigUpdate,
-    payload: Annotated[dict, RequireStellantisAdmin],
+    payload: Annotated[dict, RequireSuperAdmin],
     shift_service: Annotated[any, Depends(get_shift_service)],
 ):
-    """Update shift config (Admin)."""
+    """Update shift config. Validates 24h coverage after update. SUPER_ADMIN only."""
     return await shift_service.update_config(id, body)
 
 
-@router.get("/history")
-async def get_shift_history(
-    date: str | None = None,
-    payload: Annotated[dict, RequireEmployee] = None,
-    shift_service: Annotated[any, Depends(get_shift_service)] = None,
+@router.delete("/config/{id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_shift_config(
+    id: str,
+    payload: Annotated[dict, RequireSuperAdmin],
+    shift_service: Annotated[any, Depends(get_shift_service)],
 ):
-    """Get shift history for a date. Placeholder."""
-    return {"date": date, "shifts": []}
+    """Delete shift config. Rejected if it would break 24h coverage. SUPER_ADMIN only."""
+    await shift_service.delete_config(id)

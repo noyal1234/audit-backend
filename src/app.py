@@ -54,6 +54,8 @@ async def lifespan(app: FastAPI):
     ]:
         container.register_business_service(getter())
     container.initialize_all_services()
+    shift_svc = get_shift_service()
+    await shift_svc.ensure_default_shifts()
     yield
     container.close_all_services()
 
