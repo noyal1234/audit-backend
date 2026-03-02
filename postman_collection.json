@@ -1089,6 +1089,14 @@
             "header": [],
             "url": { "raw": "{{baseUrl}}/audits/{{auditId}}/reopen", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}", "reopen"] }
           }
+        },
+        {
+          "name": "Get AI Compliance Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/audits/{{auditId}}/report", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}", "report"] }
+          }
         }
       ]
     },
@@ -1316,6 +1324,14 @@
     {
       "name": "Media",
       "item": [
+        {
+          "name": "Get Image AI Result",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/images/{{imageId}}/ai-result", "host": ["{{baseUrl}}"], "path": ["images", "{{imageId}}", "ai-result"] }
+          }
+        },
         {
           "name": "Delete Image",
           "request": {

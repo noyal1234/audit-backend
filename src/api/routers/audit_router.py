@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, status
 
 from src.api.dependencies import RequireDealership, RequireEmployee
 from src.business_services.audit_service import get_audit_service
+from src.business_services.report_service import get_report_service
 from src.database.repositories.schemas.audit_schema import CategoryCompleteRequest
 from src.exceptions.domain_exceptions import NotFoundError
 from src.utils.pagination import PaginationParams
@@ -121,3 +122,26 @@ async def reopen_audit(
     if not audit:
         raise NotFoundError("Audit", id)
     return audit
+
+
+@router.get("/{id}/report")
+async def get_audit_report(
+    id: str,
+    payload: Annotated[dict, RequireDealership],
+    report_service: Annotated[any, Depends(get_report_service)],
+):
+    """
+    Generate a full AI compliance report for the given audit.
+
+    The report includes:
+    - Executive summary
+    - Compliance highlights
+    - Risk areas and non-compliances
+    - Root-cause observations
+    - Corrective action recommendations
+    - Shift pattern notes
+
+    Requires DEALERSHIP role or above. Report is generated on-demand (not cached).
+    """
+    return await report_service.generate_report(id, payload)
+

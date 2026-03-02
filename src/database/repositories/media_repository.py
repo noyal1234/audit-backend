@@ -49,3 +49,30 @@ class MediaRepository(BasePostgresRepository[MediaEvidenceSchema]):
             await session.delete(row)
             await session.commit()
             return True
+
+    async def update_ai_result(
+        self,
+        id: str,
+        *,
+        ai_status: str,
+        ai_compliant: bool | None,
+        ai_confidence: float | None,
+        ai_observations: str | None,
+        ai_summary: str | None,
+        ai_analyzed_at,
+    ) -> bool:
+        """Persist AI analysis outcome onto the media_evidence row. Returns True if found and updated."""
+        async with self._session_factory() as session:
+            result = await session.execute(select(MediaEvidenceSchema).where(MediaEvidenceSchema.id == id))
+            row = result.scalar_one_or_none()
+            if not row:
+                return False
+            row.ai_status = ai_status
+            row.ai_compliant = ai_compliant
+            row.ai_confidence = ai_confidence
+            row.ai_observations = ai_observations
+            row.ai_summary = ai_summary
+            row.ai_analyzed_at = ai_analyzed_at
+            await session.commit()
+            return True
+
