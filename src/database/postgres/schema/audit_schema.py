@@ -3,6 +3,8 @@ from sqlalchemy import String, DateTime, Date, ForeignKey, Boolean, Text, Unique
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from uuid import uuid4
 
+from src.database.postgres.schema.media_schema import MediaEvidenceSchema
+
 
 class AuditSchema(Base):
     """Audit run per facility per shift."""
@@ -68,11 +70,26 @@ class AuditCheckpointCategorySchema(Base):
     completed_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Category-level AI snapshot (latest media result; no media lookup needed for UI)
+    ai_latest_media_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("media_evidence.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    ai_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    ai_compliant: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     audit_checkpoint: Mapped["AuditCheckpointSchema"] = relationship(
         "AuditCheckpointSchema", back_populates="categories"
     )
-    media: Mapped[list["MediaEvidenceSchema"]] = relationship(  # type: ignore[name-defined]  # noqa: F821
+    media_items: Mapped[list["MediaEvidenceSchema"]] = relationship(
         "MediaEvidenceSchema",
         back_populates="audit_checkpoint_category",
         cascade="all, delete-orphan",
+        foreign_keys=[MediaEvidenceSchema.audit_checkpoint_category_id],
+    )
+    latest_media: Mapped["MediaEvidenceSchema | None"] = relationship(
+        "MediaEvidenceSchema",
+        foreign_keys=[ai_latest_media_id],
     )
