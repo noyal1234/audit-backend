@@ -67,7 +67,7 @@ def _checkpoint_status_label(cats: list) -> str:
 def _build_report_prompt(
     audit: AuditSchema,
     facility_name: str | None,
-    media_map: dict,  # checkpoint_id -> list[MediaEvidenceSchema]
+    media_map: dict,  # audit_checkpoint_category_id -> list[MediaEvidenceSchema]
 ) -> str:
     total_cats = sum(len(cp.categories) for cp in audit.audit_checkpoints)
     completed_cats = sum(1 for cp in audit.audit_checkpoints for c in cp.categories if c.is_completed)
@@ -91,18 +91,18 @@ def _build_report_prompt(
             remarks_text = f"Remarks: {cat.remarks}" if cat.remarks else "Remarks: —"
             lines.append(f"    - \"{cat.category_name}\": {status}. {remarks_text}")
 
-        # Attach AI image findings for this checkpoint
-        images = media_map.get(cp.checkpoint_id, [])
-        if images:
-            for img in images:
-                if img.ai_status == "COMPLETED" and img.ai_summary:
-                    verdict = "COMPLIANT" if img.ai_compliant else "NON-COMPLIANT"
-                    conf = f"{round((img.ai_confidence or 0) * 100)}%" if img.ai_confidence else "N/A"
-                    lines.append(f"    AI Image Finding: {verdict} (confidence {conf}) — {img.ai_summary}")
-                    if img.ai_observations:
-                        lines.append(f"      Observations: {img.ai_observations}")
-        else:
-            lines.append("    AI Image Finding: No image uploaded for this checkpoint.")
+            # Attach AI image findings scoped to this specific category
+            images = media_map.get(cat.id, [])
+            if images:
+                for img in images:
+                    if img.ai_status == "COMPLETED" and img.ai_summary:
+                        verdict = "COMPLIANT" if img.ai_compliant else "NON-COMPLIANT"
+                        conf = f"{round((img.ai_confidence or 0) * 100)}%" if img.ai_confidence else "N/A"
+                        lines.append(f"      AI Finding: {verdict} (confidence {conf}) — {img.ai_summary}")
+                        if img.ai_observations:
+                            lines.append(f"        Observations: {img.ai_observations}")
+            else:
+                lines.append("      AI Finding: No image uploaded for this category.")
 
     return "\n".join(lines)
 
@@ -166,10 +166,10 @@ class ReportService(BaseBusinessService):
             )
             media_rows = media_result.scalars().all()
 
-        # Build per-checkpoint image map
+        # Build per-category image map (keyed by audit_checkpoint_category_id)
         media_map: dict[str, list] = {}
         for m in media_rows:
-            media_map.setdefault(m.checkpoint_id, []).append(m)
+            media_map.setdefault(m.audit_checkpoint_category_id, []).append(m)
 
         # Compute compliance stats
         total_cats = sum(len(cp.categories) for cp in audit.audit_checkpoints)

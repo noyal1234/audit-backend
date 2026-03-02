@@ -8,9 +8,13 @@ from pydantic import BaseModel
 class MediaEvidenceResponse(BaseModel):
     id: str
     audit_id: str
-    checkpoint_id: str
+    audit_checkpoint_category_id: str
     file_path: str
     created_at: datetime
+
+    # Populated by list queries that JOIN through to the snapshot tables
+    checkpoint_name: str | None = None
+    category_name: str | None = None
 
     # AI analysis fields (populated asynchronously after upload)
     ai_status: str = "PENDING"              # PENDING | COMPLETED | FAILED

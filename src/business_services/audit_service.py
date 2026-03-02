@@ -1,11 +1,13 @@
-"""Snapshot-based shift audit: lazy creation, category completion, auto-status, reopen."""
+"""Snapshot-based shift audit: lazy creation, category completion, auto-status, reopen, delete, rebuild."""
 
+import os
 from datetime import date
 
 from src.api.dependencies import require_country_access, require_facility_access
 from src.database.repositories.audit_repository import AuditCheckpointCategoryRepository, AuditRepository
 from src.database.repositories.checkpoint_repository import CheckpointRepository
 from src.database.repositories.facility_repository import FacilityRepository
+from src.database.repositories.media_repository import MediaRepository
 from src.database.repositories.zone_repository import ZoneRepository
 from src.database.repositories.schemas.audit_schema import (
     AuditCheckpointCategoryResponse,
@@ -38,6 +40,7 @@ class AuditService(BaseBusinessService):
         self._category_result_repo: AuditCheckpointCategoryRepository | None = None
         self._checkpoint_repo: CheckpointRepository | None = None
         self._facility_repo: FacilityRepository | None = None
+        self._media_repo: MediaRepository | None = None
         self._zone_repo: ZoneRepository | None = None
 
     def _initialize_service(self) -> None:
@@ -47,6 +50,7 @@ class AuditService(BaseBusinessService):
         self._category_result_repo = AuditCheckpointCategoryRepository(factory)
         self._checkpoint_repo = CheckpointRepository(factory)
         self._facility_repo = FacilityRepository(factory)
+        self._media_repo = MediaRepository(factory)
         self._zone_repo = ZoneRepository(factory)
         self.logger.info("[OK] AuditService initialized")
 
@@ -55,6 +59,7 @@ class AuditService(BaseBusinessService):
         self._category_result_repo = None
         self._checkpoint_repo = None
         self._facility_repo = None
+        self._media_repo = None
         self._zone_repo = None
 
     async def _ensure_facility_in_country(self, facility_id: str, payload: dict) -> None:
@@ -316,6 +321,53 @@ class AuditService(BaseBusinessService):
         elif audit.status_type != "COMPLETED":
             raise ConflictError(f"Cannot reopen audit in {audit.status_type} state")
         return await self._audit_repo.update_status(audit_id, "REOPENED", None)
+
+    # --- Delete / Rebuild ---
+
+    async def delete_audit(self, audit_id: str, payload: dict) -> None:
+        """Delete audit and its media. FINALIZED audits cannot be deleted. Removes DB rows and physical files."""
+        self._require_initialized()
+        if self._media_repo is None:
+            raise RuntimeError("AuditService not initialized")
+        audit = await self._audit_repo.get_by_id(audit_id)
+        if not audit:
+            raise NotFoundError("Audit", audit_id)
+        require_facility_access(audit.facility_id, payload)
+        await self._ensure_facility_in_country(audit.facility_id, payload)
+        if audit.status_type == "FINALIZED":
+            raise ConflictError("Finalized audits cannot be deleted.")
+        file_paths = await self._media_repo.delete_by_audit(audit_id)
+        deleted = await self._audit_repo.delete(audit_id)
+        if not deleted:
+            raise NotFoundError("Audit", audit_id)
+        for fp in file_paths:
+            try:
+                os.remove(fp)
+            except FileNotFoundError:
+                self.logger.warning("[WARNING] Audit delete: file not found %s", fp)
+            except OSError as e:
+                self.logger.warning("[WARNING] Audit delete: could not remove file %s: %s", fp, e)
+
+    async def rebuild_audit(self, audit_id: str, payload: dict) -> AuditDetailResponse:
+        """Delete the audit and create a fresh one for same facility/shift with current checkpoint snapshot."""
+        self._require_initialized()
+        audit = await self._audit_repo.get_by_id(audit_id)
+        if not audit:
+            raise NotFoundError("Audit", audit_id)
+        require_facility_access(audit.facility_id, payload)
+        await self._ensure_facility_in_country(audit.facility_id, payload)
+        if audit.status_type == "FINALIZED":
+            raise ConflictError("Finalized audits cannot be deleted.")
+        facility_id = audit.facility_id
+        shift_type = audit.shift_type
+        shift_date = audit.shift_date
+        await self.delete_audit(audit_id, payload)
+        return await self._create_shift_audit_snapshot(
+            facility_id=facility_id,
+            shift_type=shift_type,
+            shift_date=shift_date,
+            created_by=payload["sub"],
+        )
 
 
 _audit_service: AuditService | None = None
