@@ -7,7 +7,6 @@ builds a structured prompt, and returns a rich AuditReportResponse. Not persiste
 from __future__ import annotations
 
 import json
-import logging
 from datetime import datetime
 
 from openai import AsyncOpenAI
@@ -22,9 +21,10 @@ from src.database.postgres.schema.media_schema import MediaEvidenceSchema
 from src.database.repositories.schemas.ai_schema import AuditReportResponse, AuditReportSection
 from src.business_services.base import BaseBusinessService
 from src.exceptions.domain_exceptions import NotFoundError
+from src.logging import get_logger
 from src.utils.datetime_utils import utc_now
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # ── Prompts ────────────────────────────────────────────────────────────────────
 

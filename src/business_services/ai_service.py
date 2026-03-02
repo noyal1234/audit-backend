@@ -12,16 +12,16 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import logging
 from pathlib import Path
 
 from openai import AsyncOpenAI
 
 from src.configs.settings import get_instance
 from src.database.repositories.schemas.ai_schema import AIAnalysisResult
+from src.logging import get_logger
 from src.utils.datetime_utils import utc_now
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # ── Prompts ────────────────────────────────────────────────────────────────────
 
@@ -39,7 +39,7 @@ Respond ONLY with valid JSON in this exact structure (no markdown, no extra text
   "compliant": true | false,
   "confidence": <float between 0.0 and 1.0>,
   "observations": "<2-4 concise bullet points separated by newlines, each starting with '• '>",
-  "summary": "<one clear sentence verdict>"
+  "summary": "<one clear sentence verdict in 50 words or less>"
 }"""
 
 

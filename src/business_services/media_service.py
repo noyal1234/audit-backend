@@ -123,6 +123,7 @@ class MediaService(BaseBusinessService):
         shift_date: str,
     ) -> None:
         """Background coroutine: fetch category description, call AI, persist result."""
+        self.logger.info("[AI] Background analysis started for media %s (%s)", media_id, category_name)
         try:
             from src.business_services.ai_service import get_ai_service
             from src.database.postgres.schema.category_schema import CategorySchema
