@@ -29,6 +29,7 @@ class MediaEvidenceSchema(Base):
     ai_observations: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ai_compliance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     audit_checkpoint_category: Mapped["AuditCheckpointCategorySchema"] = relationship(  # type: ignore[name-defined]  # noqa: F821
         "AuditCheckpointCategorySchema",

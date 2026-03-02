@@ -38,6 +38,7 @@ class AuditCheckpointCategoryResponse(BaseModel):
     ai_compliant: bool | None = None
     ai_summary: str | None = None
     ai_latest_media_id: str | None = None
+    ai_compliance_score: float | None = None
 
     model_config = {"from_attributes": True}
 

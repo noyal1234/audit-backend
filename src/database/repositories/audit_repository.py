@@ -365,8 +365,10 @@ class AuditCheckpointCategoryRepository:
         ai_status: str,
         ai_compliant: bool | None,
         ai_summary: str | None,
+        ai_compliance_score: float | None = None,
     ) -> bool:
-        """Update the category-level AI snapshot (latest media + state). Returns True if category found."""
+        """Update the category-level AI snapshot (latest media + state). Returns True if category found.
+        ai_compliance_score is only set when provided (e.g. on COMPLETED); on FAILED do not overwrite."""
         async with self._session_factory() as session:
             result = await session.execute(
                 select(AuditCheckpointCategorySchema).where(
@@ -380,6 +382,8 @@ class AuditCheckpointCategoryRepository:
             row.ai_status = ai_status
             row.ai_compliant = ai_compliant
             row.ai_summary = ai_summary
+            if ai_compliance_score is not None:
+                row.ai_compliance_score = ai_compliance_score
             await session.commit()
             return True
 

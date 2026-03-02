@@ -165,6 +165,7 @@ class MediaService(BaseBusinessService):
                 ai_observations=result.observations,
                 ai_summary=result.summary,
                 ai_analyzed_at=result.analyzed_at,
+                ai_compliance_score=result.compliance_score,
             )
             await self._audit_category_repo.update_ai_snapshot(
                 audit_checkpoint_category_id,
@@ -172,6 +173,7 @@ class MediaService(BaseBusinessService):
                 ai_status=result.status,
                 ai_compliant=result.compliant,
                 ai_summary=result.summary,
+                ai_compliance_score=result.compliance_score,
             )
             self.logger.info("[AI] Analysis %s for media %s", result.status, media_id)
         except Exception as exc:  # noqa: BLE001
@@ -184,6 +186,7 @@ class MediaService(BaseBusinessService):
                 ai_observations=None,
                 ai_summary=None,
                 ai_analyzed_at=None,
+                ai_compliance_score=None,
             )
             await self._audit_category_repo.update_ai_snapshot(
                 audit_checkpoint_category_id,

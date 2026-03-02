@@ -10,7 +10,8 @@ class AIAnalysisResult(BaseModel):
 
     status: str  # PENDING | COMPLETED | FAILED
     compliant: bool | None = None
-    confidence: float | None = None       # 0.0–1.0
+    compliance_score: float | None = None  # 0.0–100.0
+    confidence: float | None = None        # 0.0–1.0
     observations: str | None = None       # bullet-point findings
     summary: str | None = None            # one-sentence verdict
     analyzed_at: datetime | None = None
