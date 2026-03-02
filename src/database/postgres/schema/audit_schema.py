@@ -1,5 +1,5 @@
 from src.database.base import Base
-from sqlalchemy import String, DateTime, Date, ForeignKey, Boolean, Text, UniqueConstraint, func
+from sqlalchemy import Float, String, DateTime, Date, ForeignKey, Boolean, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from uuid import uuid4
 
@@ -79,6 +79,7 @@ class AuditCheckpointCategorySchema(Base):
     ai_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     ai_compliant: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_compliance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     audit_checkpoint: Mapped["AuditCheckpointSchema"] = relationship(
         "AuditCheckpointSchema", back_populates="categories"

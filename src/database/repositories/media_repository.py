@@ -69,6 +69,7 @@ class MediaRepository(BasePostgresRepository[MediaEvidenceSchema]):
                 ai_observations=r.ai_observations,
                 ai_summary=r.ai_summary,
                 ai_analyzed_at=r.ai_analyzed_at,
+                ai_compliance_score=r.ai_compliance_score,
             ))
         return items
 
@@ -105,6 +106,7 @@ class MediaRepository(BasePostgresRepository[MediaEvidenceSchema]):
         ai_observations: str | None,
         ai_summary: str | None,
         ai_analyzed_at,
+        ai_compliance_score: float | None = None,
     ) -> bool:
         """Persist AI analysis outcome onto the media_evidence row. Returns True if found and updated."""
         async with self._session_factory() as session:
@@ -118,5 +120,7 @@ class MediaRepository(BasePostgresRepository[MediaEvidenceSchema]):
             row.ai_observations = ai_observations
             row.ai_summary = ai_summary
             row.ai_analyzed_at = ai_analyzed_at
+            if ai_compliance_score is not None:
+                row.ai_compliance_score = ai_compliance_score
             await session.commit()
             return True

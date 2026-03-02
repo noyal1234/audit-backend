@@ -23,5 +23,6 @@ class MediaEvidenceResponse(BaseModel):
     ai_observations: str | None = None
     ai_summary: str | None = None
     ai_analyzed_at: datetime | None = None
+    ai_compliance_score: float | None = None
 
     model_config = {"from_attributes": True}
