@@ -49,7 +49,6 @@ class AuditCheckpointResponse(BaseModel):
     audit_sub_area_id: str
     checkpoint_name: str
     description: str | None
-    reference_image_path: str
     is_completed: bool
     created_at: datetime
     updated_at: datetime

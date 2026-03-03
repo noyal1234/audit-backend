@@ -25,7 +25,6 @@ class CheckpointRepository(BasePostgresRepository[CheckpointSchema]):
                 sub_area_id=data.sub_area_id,
                 name=data.name,
                 description=data.description,
-                reference_image_path=data.reference_image_path or "",
             )
             session.add(row)
             await session.commit()
@@ -54,8 +53,6 @@ class CheckpointRepository(BasePostgresRepository[CheckpointSchema]):
                 row.name = data.name
             if data.description is not None:
                 row.description = data.description
-            if data.reference_image_path is not None:
-                row.reference_image_path = data.reference_image_path
             await session.commit()
             await session.refresh(row)
             return CheckpointResponse.model_validate(row)

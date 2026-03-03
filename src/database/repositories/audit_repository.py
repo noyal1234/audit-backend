@@ -57,7 +57,6 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
                         audit_sub_area_id=cp.audit_sub_area_id,
                         checkpoint_name=cp.checkpoint_name,
                         description=cp.description,
-                        reference_image_path=cp.reference_image_path,
                         is_completed=cp.is_completed,
                         created_at=cp.created_at,
                         updated_at=cp.updated_at,
@@ -216,7 +215,6 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
                             audit_sub_area_id=sa_id,
                             checkpoint_name=cp.name,
                             description=cp.description,
-                            reference_image_path=cp.reference_image_path or "",
                             is_completed=False,
                         )
                         session.add(acp)

@@ -794,7 +794,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"sub_area_id\": \"{{subAreaId}}\",\n  \"name\": \"Showroom Floor\",\n  \"description\": \"Main showroom floor cleanliness\",\n  \"reference_image_path\": \"\"\n}"
+              "raw": "{\n  \"sub_area_id\": \"{{subAreaId}}\",\n  \"name\": \"Showroom Floor\",\n  \"description\": \"Main showroom floor cleanliness\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/checkpoints", "host": ["{{baseUrl}}"], "path": ["checkpoints"] }
           }

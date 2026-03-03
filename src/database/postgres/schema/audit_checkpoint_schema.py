@@ -15,7 +15,6 @@ class AuditCheckpointSchema(Base):
     )
     checkpoint_name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    reference_image_path: Mapped[str] = mapped_column(String(512), nullable=False, server_default="")
     is_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -139,7 +139,6 @@ class AIService:
         checkpoint_description: str | None,
         shift_type: str,
         shift_date: str,
-        reference_image_path: str | None = None,
     ) -> AIAnalysisResult:
         """
         Analyze an audit image against hierarchy context (Level1 -> Subcategory -> Checkpoint).
@@ -150,13 +149,6 @@ class AIService:
             audit_bytes = Path(image_path).read_bytes()
             audit_b64 = base64.b64encode(audit_bytes).decode()
             audit_mime = _mime_from_path(image_path)
-
-            ref_b64: str | None = None
-            ref_mime: str | None = None
-            if reference_image_path and Path(reference_image_path).exists():
-                ref_bytes = Path(reference_image_path).read_bytes()
-                ref_b64 = base64.b64encode(ref_bytes).decode()
-                ref_mime = _mime_from_path(reference_image_path)
 
             content = _build_image_user_content(
                 level1_name=level1_name,
@@ -169,8 +161,8 @@ class AIService:
                 shift_date=shift_date,
                 audit_image_b64=audit_b64,
                 audit_image_mime=audit_mime,
-                reference_image_b64=ref_b64,
-                reference_image_mime=ref_mime,
+                reference_image_b64=None,
+                reference_image_mime=None,
             )
 
             response = await self._client.chat.completions.create(

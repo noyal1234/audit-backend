@@ -16,7 +16,6 @@ class CheckpointSchema(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    reference_image_path: Mapped[str] = mapped_column(String(512), nullable=False, server_default="")
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     sub_area: Mapped["SubAreaSchema"] = relationship(

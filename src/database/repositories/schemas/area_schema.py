@@ -43,13 +43,11 @@ class CheckpointCreate(BaseModel):
     sub_area_id: str = Field(..., min_length=1)
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
-    reference_image_path: str = ""
 
 
 class CheckpointUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
     description: str | None = None
-    reference_image_path: str | None = None
 
 
 class CheckpointResponse(BaseModel):
@@ -57,7 +55,6 @@ class CheckpointResponse(BaseModel):
     sub_area_id: str
     name: str
     description: str | None
-    reference_image_path: str
     created_at: datetime
     model_config = {"from_attributes": True}
 

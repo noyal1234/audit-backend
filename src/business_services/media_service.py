@@ -92,12 +92,6 @@ class MediaService(BaseBusinessService):
 
         media_row = await self._media_repo.create(audit_id, audit_checkpoint_id, str(path))
 
-        ref_path: Path | None = None
-        if cp.reference_image_path:
-            ref_path = Path(cp.reference_image_path)
-            if not ref_path.is_absolute():
-                ref_path = Path(storage_path) / cp.reference_image_path
-
         sa = cp.audit_sub_area
         aa = sa.audit_area
         asyncio.create_task(
@@ -111,7 +105,6 @@ class MediaService(BaseBusinessService):
                 subcategory_description=None,
                 checkpoint_name=cp.checkpoint_name,
                 checkpoint_description=cp.description,
-                reference_image_path=str(ref_path) if ref_path and ref_path.exists() else None,
                 shift_type=audit.shift_type,
                 shift_date=str(audit.shift_date),
             )
@@ -130,7 +123,6 @@ class MediaService(BaseBusinessService):
         subcategory_description: str | None,
         checkpoint_name: str,
         checkpoint_description: str | None,
-        reference_image_path: str | None,
         shift_type: str,
         shift_date: str,
     ) -> None:
@@ -152,7 +144,6 @@ class MediaService(BaseBusinessService):
                 checkpoint_description=checkpoint_description,
                 shift_type=shift_type,
                 shift_date=shift_date,
-                reference_image_path=reference_image_path,
             )
 
             await self._media_repo.update_ai_result(
