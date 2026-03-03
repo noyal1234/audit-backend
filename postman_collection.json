@@ -859,6 +859,14 @@
           }
         },
         {
+          "name": "Delete Shift Config",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/shifts/config/{{shiftConfigId}}", "host": ["{{baseUrl}}"], "path": ["shifts", "config", "{{shiftConfigId}}"] }
+          }
+        },
+        {
           "name": "Get Shift History",
           "request": {
             "method": "GET",
@@ -1021,6 +1029,66 @@
             "method": "GET",
             "header": [],
             "description": "List all evidence images for the audit (audit_checkpoint_id, checkpoint_name, ai_status, etc.).",
+            "url": {
+              "raw": "{{baseUrl}}/audits/{{auditId}}/images",
+              "host": ["{{baseUrl}}"],
+              "path": ["audits", "{{auditId}}", "images"]
+            }
+          }
+        },
+        {
+          "name": "Update Category Remarks",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"remarks\": \"Updated review notes for this category\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/audits/{{auditId}}/checkpoint-categories/{{auditCheckpointCategoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["audits", "{{auditId}}", "checkpoint-categories", "{{auditCheckpointCategoryId}}"]
+            }
+          }
+        },
+        {
+          "name": "Upload Category Image",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    if (json.id) pm.collectionVariables.set('imageId', json.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "", "description": "Evidence image (e.g. JPG/PNG)" }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/audits/{{auditId}}/checkpoint-categories/{{auditCheckpointCategoryId}}/image",
+              "host": ["{{baseUrl}}"],
+              "path": ["audits", "{{auditId}}", "checkpoint-categories", "{{auditCheckpointCategoryId}}", "image"]
+            }
+          }
+        },
+        {
+          "name": "List Audit Images",
+          "request": {
+            "method": "GET",
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/audits/{{auditId}}/images",
               "host": ["{{baseUrl}}"],
