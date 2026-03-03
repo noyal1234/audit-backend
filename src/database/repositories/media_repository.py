@@ -2,7 +2,9 @@ from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.orm import selectinload
 
+from src.database.postgres.schema.audit_schema import AuditCheckpointCategorySchema, AuditCheckpointSchema
 from src.database.postgres.schema.media_schema import MediaEvidenceSchema
 from src.database.repositories.base_repository import BasePostgresRepository
 from src.database.repositories.schemas.media_schema import MediaEvidenceResponse
@@ -19,12 +21,17 @@ class MediaRepository(BasePostgresRepository[MediaEvidenceSchema]):
         row = await self._get_by_id_raw(id)
         return self._schema_to_media(row) if row else None
 
-    async def create(self, audit_id: str, checkpoint_id: str, file_path: str) -> MediaEvidenceResponse:
+    async def create(
+        self,
+        audit_id: str,
+        audit_checkpoint_category_id: str,
+        file_path: str,
+    ) -> MediaEvidenceResponse:
         async with self._session_factory() as session:
             row = MediaEvidenceSchema(
                 id=str(uuid4()),
                 audit_id=audit_id,
-                checkpoint_id=checkpoint_id,
+                audit_checkpoint_category_id=audit_checkpoint_category_id,
                 file_path=file_path,
             )
             session.add(row)
@@ -33,12 +40,38 @@ class MediaRepository(BasePostgresRepository[MediaEvidenceSchema]):
             return self._schema_to_media(row)
 
     async def list_by_audit(self, audit_id: str) -> list[MediaEvidenceResponse]:
+        """Return all media for an audit, enriched with checkpoint/category names from the snapshot."""
         async with self._session_factory() as session:
             result = await session.execute(
-                select(MediaEvidenceSchema).where(MediaEvidenceSchema.audit_id == audit_id)
+                select(MediaEvidenceSchema)
+                .options(
+                    selectinload(MediaEvidenceSchema.audit_checkpoint_category)
+                    .selectinload(AuditCheckpointCategorySchema.audit_checkpoint)
+                )
+                .where(MediaEvidenceSchema.audit_id == audit_id)
             )
             rows = result.scalars().all()
-        return [self._schema_to_media(r) for r in rows]
+
+        items = []
+        for r in rows:
+            acc = r.audit_checkpoint_category
+            items.append(MediaEvidenceResponse(
+                id=r.id,
+                audit_id=r.audit_id,
+                audit_checkpoint_category_id=r.audit_checkpoint_category_id,
+                checkpoint_name=acc.audit_checkpoint.checkpoint_name if acc and acc.audit_checkpoint else None,
+                category_name=acc.category_name if acc else None,
+                file_path=r.file_path,
+                created_at=r.created_at,
+                ai_status=r.ai_status,
+                ai_compliant=r.ai_compliant,
+                ai_confidence=r.ai_confidence,
+                ai_observations=r.ai_observations,
+                ai_summary=r.ai_summary,
+                ai_analyzed_at=r.ai_analyzed_at,
+                ai_compliance_score=r.ai_compliance_score,
+            ))
+        return items
 
     async def delete(self, id: str) -> bool:
         async with self._session_factory() as session:
@@ -50,6 +83,19 @@ class MediaRepository(BasePostgresRepository[MediaEvidenceSchema]):
             await session.commit()
             return True
 
+    async def delete_by_audit(self, audit_id: str) -> list[str]:
+        """Delete all media_evidence rows for the audit. Returns list of file_paths that were stored."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(MediaEvidenceSchema).where(MediaEvidenceSchema.audit_id == audit_id)
+            )
+            rows = result.scalars().all()
+            paths = [r.file_path for r in rows]
+            for row in rows:
+                await session.delete(row)
+            await session.commit()
+            return paths
+
     async def update_ai_result(
         self,
         id: str,
@@ -60,6 +106,7 @@ class MediaRepository(BasePostgresRepository[MediaEvidenceSchema]):
         ai_observations: str | None,
         ai_summary: str | None,
         ai_analyzed_at,
+        ai_compliance_score: float | None = None,
     ) -> bool:
         """Persist AI analysis outcome onto the media_evidence row. Returns True if found and updated."""
         async with self._session_factory() as session:
@@ -73,6 +120,7 @@ class MediaRepository(BasePostgresRepository[MediaEvidenceSchema]):
             row.ai_observations = ai_observations
             row.ai_summary = ai_summary
             row.ai_analyzed_at = ai_analyzed_at
+            if ai_compliance_score is not None:
+                row.ai_compliance_score = ai_compliance_score
             await session.commit()
             return True
-

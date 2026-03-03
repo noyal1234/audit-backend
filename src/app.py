@@ -24,6 +24,11 @@ from src.exceptions.domain_exceptions import DomainError
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize services on startup, close on shutdown."""
+    # Ensure app loggers are attached to stdout before any request or background task
+    from src.logging import get_logger
+    get_logger()
+    get_logger("src.business_services.ai_service")
+    get_logger("src.business_services.report_service")
     configure_container()
     container = get_container()
     from src.business_services.auth_service import get_auth_service

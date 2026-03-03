@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Dealer Hygiene Compliance Backend",
-    "description": "Complete API collection for the Dealer Hygiene Compliance Backend.\n\nSetup:\n1. Run 'POST /auth/login' with Super Admin credentials first.\n2. The access_token is auto-saved to the collection variable.\n3. All subsequent requests use it via Bearer auth.\n\nHierarchy: Country -> Zone -> Facility (Dealership) -> Checkpoints + Categories (facility-scoped, many-to-many)",
+    "description": "Complete API collection for the Dealer Hygiene Compliance Backend.\n\nSetup:\n1. Run 'POST /auth/login' with Super Admin credentials first.\n2. The access_token is auto-saved to the collection variable.\n3. All subsequent requests use it via Bearer auth.\n\nHierarchy: Country -> Zone -> Facility (Dealership) -> Checkpoints + Categories (facility-scoped, many-to-many).\n\nAudit categories include AI snapshot: ai_status, ai_compliant, ai_summary, ai_latest_media_id, ai_compliance_score (0-100). Media/image responses include ai_compliance_score.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -1011,6 +1011,7 @@
           "request": {
             "method": "GET",
             "header": [],
+            "description": "Get or create audit for current shift. Categories include ai_status, ai_compliant, ai_summary, ai_latest_media_id, ai_compliance_score.",
             "url": { "raw": "{{baseUrl}}/audits/current", "host": ["{{baseUrl}}"], "path": ["audits", "current"] }
           }
         },
@@ -1035,6 +1036,7 @@
           "request": {
             "method": "GET",
             "header": [],
+            "description": "Returns audit with audit_checkpoints and categories. Each category includes: ai_status, ai_compliant, ai_summary, ai_latest_media_id, ai_compliance_score (0.0-100.0).",
             "url": { "raw": "{{baseUrl}}/audits/{{auditId}}", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}"] }
           }
         },
@@ -1043,6 +1045,7 @@
           "request": {
             "method": "GET",
             "header": [],
+            "description": "Returns completion counts and percentage. For per-category AI state use Get Audit by ID or Get Current Audit.",
             "url": { "raw": "{{baseUrl}}/audits/{{auditId}}/progress", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}", "progress"] }
           }
         },
@@ -1075,6 +1078,68 @@
           }
         },
         {
+          "name": "Update Category Remarks",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"remarks\": \"Updated review notes for this category\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/audits/{{auditId}}/checkpoint-categories/{{auditCheckpointCategoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["audits", "{{auditId}}", "checkpoint-categories", "{{auditCheckpointCategoryId}}"]
+            }
+          }
+        },
+        {
+          "name": "Upload Category Image",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    if (json.id) pm.collectionVariables.set('imageId', json.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "", "description": "Select an image (JPEG/PNG) for this category" }
+              ]
+            },
+            "description": "Upload evidence image for this audit category. Use form-data key 'file'. Response returns media id (saved as imageId). AI analysis runs in background; poll GET /images/{{imageId}}/ai-result for result. Response includes ai_status (PENDING initially), ai_compliance_score when COMPLETED.",
+            "url": {
+              "raw": "{{baseUrl}}/audits/{{auditId}}/checkpoint-categories/{{auditCheckpointCategoryId}}/image",
+              "host": ["{{baseUrl}}"],
+              "path": ["audits", "{{auditId}}", "checkpoint-categories", "{{auditCheckpointCategoryId}}", "image"]
+            }
+          }
+        },
+        {
+          "name": "List Audit Images",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "List all evidence images for the audit. Each item includes id, audit_checkpoint_category_id, checkpoint_name, category_name, ai_status, ai_compliant, ai_compliance_score (0-100), ai_summary, etc.",
+            "url": {
+              "raw": "{{baseUrl}}/audits/{{auditId}}/images",
+              "host": ["{{baseUrl}}"],
+              "path": ["audits", "{{auditId}}", "images"]
+            }
+          }
+        },
+        {
           "name": "Finalize Audit (DEALERSHIP+)",
           "request": {
             "method": "PATCH",
@@ -1088,6 +1153,22 @@
             "method": "PATCH",
             "header": [],
             "url": { "raw": "{{baseUrl}}/audits/{{auditId}}/reopen", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}", "reopen"] }
+          }
+        },
+        {
+          "name": "Delete Audit",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/audits/{{auditId}}", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}"] }
+          }
+        },
+        {
+          "name": "Rebuild Audit",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/audits/{{auditId}}/rebuild", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}", "rebuild"] }
           }
         },
         {
@@ -1329,6 +1410,7 @@
           "request": {
             "method": "GET",
             "header": [],
+            "description": "Returns AI analysis for the image: ai_status (PENDING|COMPLETED|FAILED), ai_compliant, ai_compliance_score (0.0-100.0), ai_confidence, ai_observations, ai_summary, ai_analyzed_at.",
             "url": { "raw": "{{baseUrl}}/images/{{imageId}}/ai-result", "host": ["{{baseUrl}}"], "path": ["images", "{{imageId}}", "ai-result"] }
           }
         },

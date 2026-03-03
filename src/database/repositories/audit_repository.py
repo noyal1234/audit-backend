@@ -197,6 +197,17 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
             row = result.scalar_one()
         return self._schema_to_detail(row)
 
+    async def delete(self, audit_id: str) -> bool:
+        """Delete audit by id. Cascade removes audit_checkpoint and audit_checkpoint_category. Returns False if not found."""
+        async with self._session_factory() as session:
+            result = await session.execute(select(AuditSchema).where(AuditSchema.id == audit_id))
+            row = result.scalar_one_or_none()
+            if not row:
+                return False
+            await session.delete(row)
+            await session.commit()
+            return True
+
     async def update_status(self, id: str, status_type: str, finalized_at: datetime | None = None) -> AuditResponse | None:
         async with self._session_factory() as session:
             result = await session.execute(select(AuditSchema).where(AuditSchema.id == id))
@@ -253,6 +264,29 @@ class AuditCheckpointCategoryRepository:
             )
             row = result.scalar_one_or_none()
         return AuditCheckpointCategoryResponse.model_validate(row) if row else None
+
+    async def get_audit_checkpoint_for_category(self, category_id: str) -> AuditCheckpointResponse | None:
+        """Return the audit checkpoint snapshot that owns this category (for ownership checks and AI context)."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(AuditCheckpointCategorySchema)
+                .options(selectinload(AuditCheckpointCategorySchema.audit_checkpoint))
+                .where(AuditCheckpointCategorySchema.id == category_id)
+            )
+            cat_row = result.scalar_one_or_none()
+            if not cat_row or not cat_row.audit_checkpoint:
+                return None
+            cp = cat_row.audit_checkpoint
+        return AuditCheckpointResponse(
+            id=cp.id,
+            audit_id=cp.audit_id,
+            checkpoint_id=cp.checkpoint_id,
+            checkpoint_name=cp.checkpoint_name,
+            image_url=cp.image_url,
+            status_type=cp.status_type,
+            created_at=cp.created_at,
+            categories=[],
+        )
 
     async def get_with_checkpoint(self, id: str) -> tuple[AuditCheckpointCategorySchema | None, AuditCheckpointSchema | None]:
         """Return both the category row and its parent checkpoint (for status computation)."""
@@ -322,6 +356,36 @@ class AuditCheckpointCategoryRepository:
             await session.commit()
             await session.refresh(row)
             return AuditCheckpointCategoryResponse.model_validate(row)
+
+    async def update_ai_snapshot(
+        self,
+        audit_checkpoint_category_id: str,
+        *,
+        ai_latest_media_id: str,
+        ai_status: str,
+        ai_compliant: bool | None,
+        ai_summary: str | None,
+        ai_compliance_score: float | None = None,
+    ) -> bool:
+        """Update the category-level AI snapshot (latest media + state). Returns True if category found.
+        ai_compliance_score is only set when provided (e.g. on COMPLETED); on FAILED do not overwrite."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(AuditCheckpointCategorySchema).where(
+                    AuditCheckpointCategorySchema.id == audit_checkpoint_category_id
+                )
+            )
+            row = result.scalar_one_or_none()
+            if not row:
+                return False
+            row.ai_latest_media_id = ai_latest_media_id
+            row.ai_status = ai_status
+            row.ai_compliant = ai_compliant
+            row.ai_summary = ai_summary
+            if ai_compliance_score is not None:
+                row.ai_compliance_score = ai_compliance_score
+            await session.commit()
+            return True
 
     async def update_checkpoint_status(self, audit_checkpoint_id: str) -> str:
         """Recompute checkpoint status based on its categories. Returns new status."""
