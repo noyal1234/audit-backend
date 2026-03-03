@@ -16,3 +16,4 @@ class ZoneSchema(Base):
     updated_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     facilities: Mapped[list["FacilitySchema"]] = relationship("FacilitySchema", back_populates="zone")
+    country: Mapped["CountrySchema | None"] = relationship("CountrySchema", foreign_keys=[country_id])

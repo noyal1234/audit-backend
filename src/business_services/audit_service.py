@@ -1,23 +1,23 @@
-"""Snapshot-based shift audit: lazy creation, category completion, auto-status, reopen, delete, rebuild."""
+"""Snapshot-based shift audit: lazy creation, checkpoint completion, manual review, finalize, reopen, delete, rebuild."""
 
 import os
 from datetime import date
 
 from src.api.dependencies import require_country_access, require_facility_access
-from src.database.repositories.audit_repository import AuditCheckpointCategoryRepository, AuditRepository
-from src.database.repositories.checkpoint_repository import CheckpointRepository
+from src.database.repositories.audit_repository import AuditRepository
+from src.database.repositories.audit_checkpoint_review_repository import AuditCheckpointReviewRepository
+from src.database.repositories.area_repository import AreaRepository
 from src.database.repositories.facility_repository import FacilityRepository
 from src.database.repositories.media_repository import MediaRepository
 from src.database.repositories.zone_repository import ZoneRepository
 from src.database.repositories.schemas.audit_schema import (
-    AuditCheckpointCategoryResponse,
     AuditCreate,
     AuditDetailResponse,
     AuditProgressResponse,
     AuditResponse,
-    CategoryCompleteRequest,
-    CategoryRemarksUpdate,
+    CheckpointCompleteRequest,
 )
+from src.database.repositories.schemas.review_schema import ManualReviewRequest
 from src.business_services.base import BaseBusinessService
 from src.business_services.shift_service import get_shift_service
 from src.exceptions.domain_exceptions import ConflictError, NotFoundError
@@ -37,8 +37,8 @@ class AuditService(BaseBusinessService):
     def __init__(self) -> None:
         super().__init__()
         self._audit_repo: AuditRepository | None = None
-        self._category_result_repo: AuditCheckpointCategoryRepository | None = None
-        self._checkpoint_repo: CheckpointRepository | None = None
+        self._review_repo: AuditCheckpointReviewRepository | None = None
+        self._area_repo: AreaRepository | None = None
         self._facility_repo: FacilityRepository | None = None
         self._media_repo: MediaRepository | None = None
         self._zone_repo: ZoneRepository | None = None
@@ -47,8 +47,9 @@ class AuditService(BaseBusinessService):
         from src.di.container import get_container
         factory = get_container().get_postgres_service().get_session_factory()
         self._audit_repo = AuditRepository(factory)
-        self._category_result_repo = AuditCheckpointCategoryRepository(factory)
-        self._checkpoint_repo = CheckpointRepository(factory)
+        self._review_repo = AuditCheckpointReviewRepository(factory)
+        self._audit_repo.set_review_repository(self._review_repo)
+        self._area_repo = AreaRepository(factory)
         self._facility_repo = FacilityRepository(factory)
         self._media_repo = MediaRepository(factory)
         self._zone_repo = ZoneRepository(factory)
@@ -56,8 +57,8 @@ class AuditService(BaseBusinessService):
 
     def _close_service(self) -> None:
         self._audit_repo = None
-        self._category_result_repo = None
-        self._checkpoint_repo = None
+        self._review_repo = None
+        self._area_repo = None
         self._facility_repo = None
         self._media_repo = None
         self._zone_repo = None
@@ -130,23 +131,9 @@ class AuditService(BaseBusinessService):
         shift_date: date,
         created_by: str,
     ) -> AuditDetailResponse:
-        checkpoints, _ = await self._checkpoint_repo.list_checkpoints(
-            facility_id=facility_id, offset=0, limit=1000
-        )
-        snapshot = []
-        for cp in checkpoints:
-            cats = [
-                {"category_id": cat.id, "category_name": cat.name}
-                for cat in cp.categories
-            ]
-            snapshot.append({
-                "checkpoint_id": cp.id,
-                "checkpoint_name": cp.name,
-                "image_url": cp.image_url,
-                "categories": cats,
-            })
+        hierarchy = await self._area_repo.get_facility_hierarchy(facility_id)
         data = AuditCreate(facility_id=facility_id, shift_type=shift_type, shift_date=shift_date)
-        return await self._audit_repo.create_with_snapshot(data, created_by, snapshot)
+        return await self._audit_repo.create_with_snapshot(data, created_by, hierarchy)
 
     # --- Read ---
 
@@ -202,15 +189,15 @@ class AuditService(BaseBusinessService):
             raise NotFoundError("Audit", audit_id)
         return progress
 
-    # --- Category completion ---
+    # --- Checkpoint completion (EMPLOYEE+) ---
 
-    async def complete_category(
+    async def mark_checkpoint_completed(
         self,
         audit_id: str,
-        category_result_id: str,
-        data: CategoryCompleteRequest,
+        checkpoint_id: str,
+        data: CheckpointCompleteRequest | None,
         payload: dict,
-    ) -> AuditCheckpointCategoryResponse:
+    ) -> AuditDetailResponse:
         self._require_initialized()
         audit = await self._audit_repo.get_by_id(audit_id)
         if not audit:
@@ -220,28 +207,26 @@ class AuditService(BaseBusinessService):
         require_facility_access(audit.facility_id, payload)
         await self._ensure_facility_in_country(audit.facility_id, payload)
 
-        cat_row, cp_row = await self._category_result_repo.get_with_checkpoint(category_result_id)
-        if not cat_row or not cp_row:
-            raise NotFoundError("AuditCheckpointCategory", category_result_id)
-        if cp_row.audit_id != audit_id:
-            raise NotFoundError("AuditCheckpointCategory", category_result_id)
+        cp = await self._audit_repo.get_checkpoint_by_id(checkpoint_id, audit_id)
+        if not cp:
+            raise NotFoundError("AuditCheckpoint", checkpoint_id)
 
-        result = await self._category_result_repo.mark_complete(
-            category_result_id, payload["sub"], utc_now(), data.remarks
+        ok = await self._audit_repo.mark_checkpoint_completed(
+            checkpoint_id, (data.remarks if data else None)
         )
-        if not result:
-            raise NotFoundError("AuditCheckpointCategory", category_result_id)
+        if not ok:
+            raise NotFoundError("AuditCheckpoint", checkpoint_id)
+        detail = await self._audit_repo.get_detail(audit_id)
+        if not detail:
+            raise NotFoundError("Audit", audit_id)
+        return detail
 
-        await self._category_result_repo.update_checkpoint_status(cp_row.id)
-        await self._category_result_repo.recompute_audit_status(audit_id)
-        return result
-
-    async def uncomplete_category(
+    async def mark_checkpoint_incomplete(
         self,
         audit_id: str,
-        category_result_id: str,
+        checkpoint_id: str,
         payload: dict,
-    ) -> AuditCheckpointCategoryResponse:
+    ) -> AuditDetailResponse:
         self._require_initialized()
         audit = await self._audit_repo.get_by_id(audit_id)
         if not audit:
@@ -251,47 +236,56 @@ class AuditService(BaseBusinessService):
         require_facility_access(audit.facility_id, payload)
         await self._ensure_facility_in_country(audit.facility_id, payload)
 
-        cat_row, cp_row = await self._category_result_repo.get_with_checkpoint(category_result_id)
-        if not cat_row or not cp_row:
-            raise NotFoundError("AuditCheckpointCategory", category_result_id)
-        if cp_row.audit_id != audit_id:
-            raise NotFoundError("AuditCheckpointCategory", category_result_id)
+        cp = await self._audit_repo.get_checkpoint_by_id(checkpoint_id, audit_id)
+        if not cp:
+            raise NotFoundError("AuditCheckpoint", checkpoint_id)
 
-        result = await self._category_result_repo.mark_uncomplete(category_result_id)
-        if not result:
-            raise NotFoundError("AuditCheckpointCategory", category_result_id)
+        ok = await self._audit_repo.mark_checkpoint_incomplete(checkpoint_id)
+        if not ok:
+            raise NotFoundError("AuditCheckpoint", checkpoint_id)
+        detail = await self._audit_repo.get_detail(audit_id)
+        if not detail:
+            raise NotFoundError("Audit", audit_id)
+        return detail
 
-        await self._category_result_repo.update_checkpoint_status(cp_row.id)
-        await self._category_result_repo.recompute_audit_status(audit_id)
-        return result
+    # --- Manual review (DEALERSHIP+); block if FINALIZED ---
 
-    async def update_category_remarks(
+    async def submit_manual_review(
         self,
         audit_id: str,
-        category_result_id: str,
-        data: CategoryRemarksUpdate,
+        checkpoint_id: str,
+        data: ManualReviewRequest,
         payload: dict,
-    ) -> AuditCheckpointCategoryResponse:
-        """Update only the remarks (review text) for a category. Does not change completion state."""
+    ) -> AuditDetailResponse:
         self._require_initialized()
+        if self._review_repo is None:
+            raise RuntimeError("AuditService not initialized")
         audit = await self._audit_repo.get_by_id(audit_id)
         if not audit:
             raise NotFoundError("Audit", audit_id)
-        if audit.status_type not in EDITABLE_STATUSES:
-            raise ConflictError(f"Cannot modify audit in {audit.status_type} state")
+        if audit.status_type == "FINALIZED":
+            raise ConflictError("Cannot add or change review on a finalized audit")
         require_facility_access(audit.facility_id, payload)
         await self._ensure_facility_in_country(audit.facility_id, payload)
 
-        cat_row, cp_row = await self._category_result_repo.get_with_checkpoint(category_result_id)
-        if not cat_row or not cp_row:
-            raise NotFoundError("AuditCheckpointCategory", category_result_id)
-        if cp_row.audit_id != audit_id:
-            raise NotFoundError("AuditCheckpointCategory", category_result_id)
+        cp = await self._audit_repo.get_checkpoint_by_id(checkpoint_id, audit_id)
+        if not cp:
+            raise NotFoundError("AuditCheckpoint", checkpoint_id)
 
-        result = await self._category_result_repo.update_remarks(category_result_id, data.remarks)
-        if not result:
-            raise NotFoundError("AuditCheckpointCategory", category_result_id)
-        return result
+        await self._review_repo.insert(
+            audit_checkpoint_id=checkpoint_id,
+            review_type="MANUAL",
+            compliant=data.compliant,
+            score=data.score,
+            confidence=None,
+            remarks=data.remarks,
+            model_version=None,
+            created_by=payload["sub"],
+        )
+        detail = await self._audit_repo.get_detail(audit_id)
+        if not detail:
+            raise NotFoundError("Audit", audit_id)
+        return detail
 
     # --- Finalize / Reopen ---
 
@@ -349,7 +343,7 @@ class AuditService(BaseBusinessService):
                 self.logger.warning("[WARNING] Audit delete: could not remove file %s: %s", fp, e)
 
     async def rebuild_audit(self, audit_id: str, payload: dict) -> AuditDetailResponse:
-        """Delete the audit and create a fresh one for same facility/shift with current checkpoint snapshot."""
+        """Delete the audit and create a fresh one for same facility/shift with current hierarchy snapshot."""
         self._require_initialized()
         audit = await self._audit_repo.get_by_id(audit_id)
         if not audit:

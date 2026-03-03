@@ -1,15 +1,18 @@
 from uuid import uuid4
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from src.database.postgres.schema.facility_schema import FacilitySchema
 from src.database.postgres.schema.zone_schema import ZoneSchema
 from src.database.repositories.base_repository import BasePostgresRepository
 from src.database.repositories.schemas.dealer_schema import (
+    CountryMini,
     FacilityCreate,
     FacilityResponse,
     FacilityUpdate,
+    ZoneMini,
 )
 
 
@@ -17,12 +20,46 @@ class FacilityRepository(BasePostgresRepository[FacilitySchema]):
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         super().__init__(session_factory, FacilitySchema)
 
-    def _schema_to_facility(self, row: FacilitySchema) -> FacilityResponse:
-        return FacilityResponse.model_validate(row)
+    def _row_to_facility_response(self, row: FacilitySchema) -> FacilityResponse:
+        zone_mini: ZoneMini | None = None
+        if getattr(row, "zone", None) and row.zone is not None:
+            country_mini = None
+            if getattr(row.zone, "country", None) and row.zone.country is not None:
+                country_mini = CountryMini(id=row.zone.country.id, name=row.zone.country.name)
+            zone_mini = ZoneMini(
+                id=row.zone.id,
+                name=row.zone.name,
+                country=country_mini,
+            )
+        return FacilityResponse(
+            id=row.id,
+            zone_id=row.zone_id,
+            zone=zone_mini,
+            user_id=row.user_id,
+            name=row.name,
+            code=row.code,
+            address=row.address,
+            dealer_name=row.dealer_name,
+            dealer_phone=row.dealer_phone,
+            dealer_email=row.dealer_email,
+            dealer_designation=row.dealer_designation,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
 
     async def get_by_id(self, id: str) -> FacilityResponse | None:
-        row = await self._get_by_id_raw(id)
-        return self._schema_to_facility(row) if row else None
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(FacilitySchema)
+                .options(
+                    selectinload(FacilitySchema.zone).selectinload(ZoneSchema.country),
+                )
+                .where(FacilitySchema.id == id)
+            )
+            row = result.scalar_one_or_none()
+            if row is None:
+                return None
+            return self._row_to_facility_response(row)
 
     async def list_facilities(
         self,
@@ -36,7 +73,12 @@ class FacilityRepository(BasePostgresRepository[FacilitySchema]):
         order: str = "desc",
     ) -> tuple[list[FacilityResponse], int]:
         async with self._session_factory() as session:
-            q = select(FacilitySchema)
+            q = (
+                select(FacilitySchema)
+                .options(
+                    selectinload(FacilitySchema.zone).selectinload(ZoneSchema.country),
+                )
+            )
             count_q = select(func.count()).select_from(FacilitySchema)
             if zone_id:
                 q = q.where(FacilitySchema.zone_id == zone_id)
@@ -56,7 +98,8 @@ class FacilityRepository(BasePostgresRepository[FacilitySchema]):
             q = q.offset(offset).limit(limit)
             result = await session.execute(q)
             rows = result.scalars().all()
-        return [self._schema_to_facility(r) for r in rows], total
+            items = [self._row_to_facility_response(r) for r in rows]
+        return items, total
 
     async def create(self, data: FacilityCreate) -> FacilityResponse:
         async with self._session_factory() as session:
@@ -74,8 +117,7 @@ class FacilityRepository(BasePostgresRepository[FacilitySchema]):
             )
             session.add(row)
             await session.commit()
-            await session.refresh(row)
-            return self._schema_to_facility(row)
+        return await self.get_by_id(row.id)
 
     async def update(self, id: str, data: FacilityUpdate) -> FacilityResponse | None:
         async with self._session_factory() as session:
@@ -102,8 +144,7 @@ class FacilityRepository(BasePostgresRepository[FacilitySchema]):
             if data.dealer_designation is not None:
                 row.dealer_designation = data.dealer_designation
             await session.commit()
-            await session.refresh(row)
-            return self._schema_to_facility(row)
+        return await self.get_by_id(id)
 
     async def delete(self, id: str) -> bool:
         async with self._session_factory() as session:

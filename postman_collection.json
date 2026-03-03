@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Dealer Hygiene Compliance Backend",
-    "description": "Complete API collection for the Dealer Hygiene Compliance Backend.\n\nSetup:\n1. Run 'POST /auth/login' with Super Admin credentials first.\n2. The access_token is auto-saved to the collection variable.\n3. All subsequent requests use it via Bearer auth.\n\nHierarchy: Country -> Zone -> Facility (Dealership) -> Checkpoints + Categories (facility-scoped, many-to-many).\n\nAudit categories include AI snapshot: ai_status, ai_compliant, ai_summary, ai_latest_media_id, ai_compliance_score (0-100). Media/image responses include ai_compliance_score.",
+    "description": "Complete API collection for the Dealer Hygiene Compliance Backend.\n\nSetup:\n1. Run 'POST /auth/login' with Super Admin or Dealership credentials first.\n2. The access_token is auto-saved to the collection variable.\n3. All subsequent requests use it via Bearer auth.\n\nHierarchy: Country -> Zone -> Facility (Dealership) -> Areas -> Sub-Areas -> Checkpoints (facility-scoped).\n\nAudits: snapshot per shift (areas -> sub_areas -> checkpoints). Checkpoint completion (is_completed), manual review (PATCH review), AI review (insert on image analysis). Effective review = latest per checkpoint.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -14,11 +14,11 @@
     { "key": "dealershipUserId", "value": "" },
     { "key": "employeeId", "value": "" },
     { "key": "employeeUserId", "value": "" },
-    { "key": "categoryId", "value": "" },
-    { "key": "categoryId2", "value": "" },
+    { "key": "areaId", "value": "" },
+    { "key": "subAreaId", "value": "" },
     { "key": "checkpointId", "value": "" },
     { "key": "auditId", "value": "" },
-    { "key": "auditCheckpointCategoryId", "value": "" },
+    { "key": "auditCheckpointId", "value": "" },
     { "key": "stellantisAdminId", "value": "" },
     { "key": "shiftConfigId", "value": "" },
     { "key": "userId", "value": "" },
@@ -500,7 +500,16 @@
                 { "key": "limit", "value": "20" }
               ]
             }
-          }
+          },
+          "response": [
+            {
+              "name": "With zone and country",
+              "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/dealerships?page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["dealerships"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }] } },
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"items\": [\n    {\n      \"id\": \"\",\n      \"zone_id\": \"\",\n      \"zone\": {\n        \"id\": \"\",\n        \"name\": \"\",\n        \"country\": {\n          \"id\": \"\",\n          \"name\": \"\"\n        }\n      },\n      \"user_id\": null,\n      \"name\": \"\",\n      \"code\": null,\n      \"address\": null,\n      \"dealer_name\": null,\n      \"dealer_phone\": null,\n      \"dealer_email\": null,\n      \"dealer_designation\": null,\n      \"created_at\": \"\",\n      \"updated_at\": \"\"\n    }\n  ],\n  \"total\": 0\n}"
+            }
+          ]
         },
         {
           "name": "Get Dealership by ID",
@@ -508,7 +517,16 @@
             "method": "GET",
             "header": [],
             "url": { "raw": "{{baseUrl}}/dealerships/{{dealershipId}}", "host": ["{{baseUrl}}"], "path": ["dealerships", "{{dealershipId}}"] }
-          }
+          },
+          "response": [
+            {
+              "name": "With zone and country",
+              "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/dealerships/{{dealershipId}}", "host": ["{{baseUrl}}"], "path": ["dealerships", "{{dealershipId}}"] } },
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"id\": \"\",\n  \"zone_id\": \"\",\n  \"zone\": {\n    \"id\": \"\",\n    \"name\": \"\",\n    \"country\": {\n      \"id\": \"\",\n      \"name\": \"\"\n    }\n  },\n  \"user_id\": null,\n  \"name\": \"\",\n  \"code\": null,\n  \"address\": null,\n  \"dealer_name\": null,\n  \"dealer_phone\": null,\n  \"dealer_email\": null,\n  \"dealer_designation\": null,\n  \"created_at\": \"\",\n  \"updated_at\": \"\"\n}"
+            }
+          ]
         },
         {
           "name": "Update Dealership",
@@ -629,11 +647,27 @@
       ]
     },
     {
-      "name": "Categories (Facility-Scoped)",
-      "description": "Facility-scoped categories. DEALERSHIP creates; EMPLOYEE can view. Login as Dealership first.",
+      "name": "Facility Hierarchy - Areas",
+      "description": "Areas under a facility. DEALERSHIP creates; EMPLOYEE can view. Login as Dealership first.",
       "item": [
         {
-          "name": "Create Category - Hygiene",
+          "name": "List Areas by Facility",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/facilities/{{dealershipId}}/areas", "host": ["{{baseUrl}}"], "path": ["facilities", "{{dealershipId}}", "areas"] }
+          }
+        },
+        {
+          "name": "Get Facility Hierarchy (Areas -> Sub-Areas -> Checkpoints)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/facilities/{{dealershipId}}/hierarchy", "host": ["{{baseUrl}}"], "path": ["facilities", "{{dealershipId}}", "hierarchy"] }
+          }
+        },
+        {
+          "name": "Create Area",
           "event": [
             {
               "listen": "test",
@@ -642,7 +676,7 @@
                 "exec": [
                   "if (pm.response.code === 201) {",
                   "    var json = pm.response.json();",
-                  "    pm.collectionVariables.set('categoryId', json.id);",
+                  "    pm.collectionVariables.set('areaId', json.id);",
                   "}"
                 ]
               }
@@ -653,118 +687,94 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"facility_id\": \"{{dealershipId}}\",\n  \"name\": \"Hygiene\",\n  \"description\": \"Cleanliness and sanitation standards\"\n}"
+              "raw": "{\n  \"facility_id\": \"{{dealershipId}}\",\n  \"name\": \"Showroom\"\n}"
             },
-            "url": { "raw": "{{baseUrl}}/categories", "host": ["{{baseUrl}}"], "path": ["categories"] }
+            "url": { "raw": "{{baseUrl}}/areas", "host": ["{{baseUrl}}"], "path": ["areas"] }
           }
         },
         {
-          "name": "Create Category - Safety",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "if (pm.response.code === 201) {",
-                  "    var json = pm.response.json();",
-                  "    pm.collectionVariables.set('categoryId2', json.id);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"facility_id\": \"{{dealershipId}}\",\n  \"name\": \"Safety\",\n  \"description\": \"Safety compliance and equipment checks\"\n}"
-            },
-            "url": { "raw": "{{baseUrl}}/categories", "host": ["{{baseUrl}}"], "path": ["categories"] }
-          }
-        },
-        {
-          "name": "Create Category - Organization",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"facility_id\": \"{{dealershipId}}\",\n  \"name\": \"Organization\",\n  \"description\": \"Workspace organization and tidiness\"\n}"
-            },
-            "url": { "raw": "{{baseUrl}}/categories", "host": ["{{baseUrl}}"], "path": ["categories"] }
-          }
-        },
-        {
-          "name": "List Categories",
+          "name": "Get Area by ID",
           "request": {
             "method": "GET",
             "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/categories?page=1&limit=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["categories"],
-              "query": [
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "20" }
-              ]
-            }
+            "url": { "raw": "{{baseUrl}}/areas/{{areaId}}", "host": ["{{baseUrl}}"], "path": ["areas", "{{areaId}}"] }
           }
         },
         {
-          "name": "List Categories by Facility",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/categories?facility_id={{dealershipId}}&page=1&limit=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["categories"],
-              "query": [
-                { "key": "facility_id", "value": "{{dealershipId}}" },
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "20" }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Category by ID",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": { "raw": "{{baseUrl}}/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["categories", "{{categoryId}}"] }
-          }
-        },
-        {
-          "name": "Update Category",
+          "name": "Update Area",
           "request": {
             "method": "PATCH",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Hygiene & Cleanliness\",\n  \"description\": \"Updated: comprehensive cleanliness standards\"\n}"
-            },
-            "url": { "raw": "{{baseUrl}}/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["categories", "{{categoryId}}"] }
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Showroom (Main)\"\n}" },
+            "url": { "raw": "{{baseUrl}}/areas/{{areaId}}", "host": ["{{baseUrl}}"], "path": ["areas", "{{areaId}}"] }
           }
         },
         {
-          "name": "Delete Category",
+          "name": "Delete Area",
           "request": {
             "method": "DELETE",
             "header": [],
-            "url": { "raw": "{{baseUrl}}/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["categories", "{{categoryId}}"] }
+            "url": { "raw": "{{baseUrl}}/areas/{{areaId}}", "host": ["{{baseUrl}}"], "path": ["areas", "{{areaId}}"] }
           }
         }
       ]
     },
     {
-      "name": "Checkpoints (Facility-Scoped)",
-      "description": "Checkpoints are areas inside a facility. Creating requires an image upload (multipart/form-data). Login as Dealership first.",
+      "name": "Sub-Areas & Checkpoints",
+      "description": "Sub-areas under an area; checkpoints under a sub-area. Create area first, then sub-area, then checkpoint.",
       "item": [
         {
-          "name": "Create Checkpoint - Showroom Floor",
+          "name": "List Sub-Areas by Area",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/areas/{{areaId}}/sub-areas", "host": ["{{baseUrl}}"], "path": ["areas", "{{areaId}}", "sub-areas"] }
+          }
+        },
+        {
+          "name": "Create Sub-Area",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('subAreaId', json.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"area_id\": \"{{areaId}}\",\n  \"name\": \"Floor 1\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/sub-areas", "host": ["{{baseUrl}}"], "path": ["sub-areas"] }
+          }
+        },
+        {
+          "name": "Get Sub-Area by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/sub-areas/{{subAreaId}}", "host": ["{{baseUrl}}"], "path": ["sub-areas", "{{subAreaId}}"] }
+          }
+        },
+        {
+          "name": "List Checkpoints by Sub-Area",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/sub-areas/{{subAreaId}}/checkpoints", "host": ["{{baseUrl}}"], "path": ["sub-areas", "{{subAreaId}}", "checkpoints"] }
+          }
+        },
+        {
+          "name": "Create Checkpoint",
           "event": [
             {
               "listen": "test",
@@ -781,81 +791,12 @@
           ],
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                { "key": "name", "value": "Showroom Floor", "type": "text" },
-                { "key": "file", "type": "file", "src": "", "description": "Select an image (JPEG/PNG) of the checkpoint area" },
-                { "key": "facility_id", "value": "{{dealershipId}}", "type": "text", "description": "Optional if logged in as Dealership" }
-              ]
+              "mode": "raw",
+              "raw": "{\n  \"sub_area_id\": \"{{subAreaId}}\",\n  \"name\": \"Showroom Floor\",\n  \"description\": \"Main showroom floor cleanliness\",\n  \"reference_image_path\": \"\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/checkpoints", "host": ["{{baseUrl}}"], "path": ["checkpoints"] }
-          }
-        },
-        {
-          "name": "Create Checkpoint - Workshop Bay",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                { "key": "name", "value": "Workshop Bay", "type": "text" },
-                { "key": "file", "type": "file", "src": "", "description": "Select an image" },
-                { "key": "facility_id", "value": "{{dealershipId}}", "type": "text" }
-              ]
-            },
-            "url": { "raw": "{{baseUrl}}/checkpoints", "host": ["{{baseUrl}}"], "path": ["checkpoints"] }
-          }
-        },
-        {
-          "name": "Create Checkpoint - Customer Restroom",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                { "key": "name", "value": "Customer Restroom", "type": "text" },
-                { "key": "file", "type": "file", "src": "", "description": "Select an image" },
-                { "key": "facility_id", "value": "{{dealershipId}}", "type": "text" }
-              ]
-            },
-            "url": { "raw": "{{baseUrl}}/checkpoints", "host": ["{{baseUrl}}"], "path": ["checkpoints"] }
-          }
-        },
-        {
-          "name": "List Checkpoints",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/checkpoints?page=1&limit=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["checkpoints"],
-              "query": [
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "20" }
-              ]
-            }
-          }
-        },
-        {
-          "name": "List Checkpoints by Facility",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/checkpoints?facility_id={{dealershipId}}&page=1&limit=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["checkpoints"],
-              "query": [
-                { "key": "facility_id", "value": "{{dealershipId}}" },
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "20" }
-              ]
-            }
           }
         },
         {
@@ -871,10 +812,7 @@
           "request": {
             "method": "PATCH",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Main Showroom Floor\"\n}"
-            },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Main Showroom Floor\"\n}" },
             "url": { "raw": "{{baseUrl}}/checkpoints/{{checkpointId}}", "host": ["{{baseUrl}}"], "path": ["checkpoints", "{{checkpointId}}"] }
           }
         },
@@ -884,52 +822,6 @@
             "method": "DELETE",
             "header": [],
             "url": { "raw": "{{baseUrl}}/checkpoints/{{checkpointId}}", "host": ["{{baseUrl}}"], "path": ["checkpoints", "{{checkpointId}}"] }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Checkpoint-Category Assignments",
-      "description": "Many-to-many: assign categories to checkpoints. Both must belong to the same facility.",
-      "item": [
-        {
-          "name": "Assign Category (Hygiene) to Checkpoint",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"category_id\": \"{{categoryId}}\"\n}"
-            },
-            "url": { "raw": "{{baseUrl}}/checkpoints/{{checkpointId}}/categories", "host": ["{{baseUrl}}"], "path": ["checkpoints", "{{checkpointId}}", "categories"] }
-          }
-        },
-        {
-          "name": "Assign Category (Safety) to Checkpoint",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"category_id\": \"{{categoryId2}}\"\n}"
-            },
-            "url": { "raw": "{{baseUrl}}/checkpoints/{{checkpointId}}/categories", "host": ["{{baseUrl}}"], "path": ["checkpoints", "{{checkpointId}}", "categories"] }
-          }
-        },
-        {
-          "name": "List Categories for Checkpoint",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": { "raw": "{{baseUrl}}/checkpoints/{{checkpointId}}/categories", "host": ["{{baseUrl}}"], "path": ["checkpoints", "{{checkpointId}}", "categories"] }
-          }
-        },
-        {
-          "name": "Remove Category from Checkpoint",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": { "raw": "{{baseUrl}}/checkpoints/{{checkpointId}}/categories/{{categoryId2}}", "host": ["{{baseUrl}}"], "path": ["checkpoints", "{{checkpointId}}", "categories", "{{categoryId2}}"] }
           }
         }
       ]
@@ -997,10 +889,10 @@
                   "if (pm.response.code === 200) {",
                   "    var json = pm.response.json();",
                   "    pm.collectionVariables.set('auditId', json.id);",
-                  "    if (json.audit_checkpoints && json.audit_checkpoints.length > 0) {",
-                  "        var cp = json.audit_checkpoints[0];",
-                  "        if (cp.categories && cp.categories.length > 0) {",
-                  "            pm.collectionVariables.set('auditCheckpointCategoryId', cp.categories[0].id);",
+                  "    if (json.audit_areas && json.audit_areas.length > 0) {",
+                  "        var aa = json.audit_areas[0];",
+                  "        if (aa.sub_areas && aa.sub_areas.length > 0 && aa.sub_areas[0].checkpoints && aa.sub_areas[0].checkpoints.length > 0) {",
+                  "            pm.collectionVariables.set('auditCheckpointId', aa.sub_areas[0].checkpoints[0].id);",
                   "        }",
                   "    }",
                   "}"
@@ -1011,7 +903,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "description": "Get or create audit for current shift. Categories include ai_status, ai_compliant, ai_summary, ai_latest_media_id, ai_compliance_score.",
+            "description": "Get or create audit for current shift. Returns audit_areas -> sub_areas -> checkpoints with effective_review.",
             "url": { "raw": "{{baseUrl}}/audits/current", "host": ["{{baseUrl}}"], "path": ["audits", "current"] }
           }
         },
@@ -1036,7 +928,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "description": "Returns audit with audit_checkpoints and categories. Each category includes: ai_status, ai_compliant, ai_summary, ai_latest_media_id, ai_compliance_score (0.0-100.0).",
+            "description": "Returns audit with audit_areas -> sub_areas -> checkpoints; each checkpoint has is_completed and effective_review.",
             "url": { "raw": "{{baseUrl}}/audits/{{auditId}}", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}"] }
           }
         },
@@ -1045,56 +937,53 @@
           "request": {
             "method": "GET",
             "header": [],
-            "description": "Returns completion counts and percentage. For per-category AI state use Get Audit by ID or Get Current Audit.",
+            "description": "Returns total_checkpoints, completed_checkpoints, completion_percentage, compliant_checkpoints, compliance_percentage.",
             "url": { "raw": "{{baseUrl}}/audits/{{auditId}}/progress", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}", "progress"] }
           }
         },
         {
-          "name": "Complete Category",
+          "name": "Complete Checkpoint",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"remarks\": \"Area cleaned and verified\"\n}"
-            },
+            "body": { "mode": "raw", "raw": "{\n  \"remarks\": \"Area cleaned and verified\"\n}" },
             "url": {
-              "raw": "{{baseUrl}}/audits/{{auditId}}/checkpoint-categories/{{auditCheckpointCategoryId}}/complete",
+              "raw": "{{baseUrl}}/audits/{{auditId}}/checkpoints/{{auditCheckpointId}}/complete",
               "host": ["{{baseUrl}}"],
-              "path": ["audits", "{{auditId}}", "checkpoint-categories", "{{auditCheckpointCategoryId}}", "complete"]
+              "path": ["audits", "{{auditId}}", "checkpoints", "{{auditCheckpointId}}", "complete"]
             }
           }
         },
         {
-          "name": "Uncomplete Category",
+          "name": "Uncomplete Checkpoint",
           "request": {
             "method": "POST",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/audits/{{auditId}}/checkpoint-categories/{{auditCheckpointCategoryId}}/uncomplete",
+              "raw": "{{baseUrl}}/audits/{{auditId}}/checkpoints/{{auditCheckpointId}}/uncomplete",
               "host": ["{{baseUrl}}"],
-              "path": ["audits", "{{auditId}}", "checkpoint-categories", "{{auditCheckpointCategoryId}}", "uncomplete"]
+              "path": ["audits", "{{auditId}}", "checkpoints", "{{auditCheckpointId}}", "uncomplete"]
             }
           }
         },
         {
-          "name": "Update Category Remarks",
+          "name": "PATCH Checkpoint Review (DEALERSHIP+)",
           "request": {
             "method": "PATCH",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"remarks\": \"Updated review notes for this category\"\n}"
+              "raw": "{\n  \"compliant\": true,\n  \"score\": 85.0,\n  \"remarks\": \"Manual override: verified on site\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/audits/{{auditId}}/checkpoint-categories/{{auditCheckpointCategoryId}}",
+              "raw": "{{baseUrl}}/audits/{{auditId}}/checkpoints/{{auditCheckpointId}}/review",
               "host": ["{{baseUrl}}"],
-              "path": ["audits", "{{auditId}}", "checkpoint-categories", "{{auditCheckpointCategoryId}}"]
+              "path": ["audits", "{{auditId}}", "checkpoints", "{{auditCheckpointId}}", "review"]
             }
           }
         },
         {
-          "name": "Upload Category Image",
+          "name": "Upload Checkpoint Image",
           "event": [
             {
               "listen": "test",
@@ -1115,14 +1004,14 @@
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "file", "type": "file", "src": "", "description": "Select an image (JPEG/PNG) for this category" }
+                { "key": "file", "type": "file", "src": "", "description": "Select an image (JPEG/PNG) for this checkpoint" }
               ]
             },
-            "description": "Upload evidence image for this audit category. Use form-data key 'file'. Response returns media id (saved as imageId). AI analysis runs in background; poll GET /images/{{imageId}}/ai-result for result. Response includes ai_status (PENDING initially), ai_compliance_score when COMPLETED.",
+            "description": "Upload evidence image for audit checkpoint. AI analysis runs in background and inserts an AI review when done.",
             "url": {
-              "raw": "{{baseUrl}}/audits/{{auditId}}/checkpoint-categories/{{auditCheckpointCategoryId}}/image",
+              "raw": "{{baseUrl}}/audits/{{auditId}}/checkpoints/{{auditCheckpointId}}/image",
               "host": ["{{baseUrl}}"],
-              "path": ["audits", "{{auditId}}", "checkpoint-categories", "{{auditCheckpointCategoryId}}", "image"]
+              "path": ["audits", "{{auditId}}", "checkpoints", "{{auditCheckpointId}}", "image"]
             }
           }
         },
@@ -1131,7 +1020,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "description": "List all evidence images for the audit. Each item includes id, audit_checkpoint_category_id, checkpoint_name, category_name, ai_status, ai_compliant, ai_compliance_score (0-100), ai_summary, etc.",
+            "description": "List all evidence images for the audit (audit_checkpoint_id, checkpoint_name, ai_status, etc.).",
             "url": {
               "raw": "{{baseUrl}}/audits/{{auditId}}/images",
               "host": ["{{baseUrl}}"],
