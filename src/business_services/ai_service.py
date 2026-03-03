@@ -1,15 +1,14 @@
 """AI image analysis service via LiteLLM proxy (OpenAI-compatible).
 
 Design:
-- Uses AsyncOpenAI pointed at the LiteLLM proxy (https://litellm.tarento.dev).
-- analyze_image(): reads file bytes, base64-encodes them, sends to gemini-flash
-  with checkpoint + category description as context, returns AIAnalysisResult.
-- Callers (MediaService) run this in a background task so upload response is instant.
+- Uses AsyncOpenAI pointed at the LiteLLM proxy.
+- Hierarchy-aware: Level1 -> Subcategory -> Checkpoint. AI evaluates ONLY the checkpoint;
+  Level1 and Subcategory provide contextual guidance.
+- analyze_image() returns AIAnalysisResult; callers (MediaService) insert into audit_checkpoint_review with review_type=AI.
 """
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import json
 from pathlib import Path
@@ -26,11 +25,16 @@ logger = get_logger(__name__)
 # ── Prompts ────────────────────────────────────────────────────────────────────
 
 _IMAGE_SYSTEM_PROMPT = """You are a dealership hygiene compliance auditor AI.
-Your task is to evaluate whether the submitted audit photo meets the required
-hygiene and presentation standard for the specified checkpoint and category.
+Context is organized in a hierarchy: Level1 -> Subcategory -> Checkpoint.
+Your task is to evaluate ONLY the checkpoint: whether the submitted audit photo meets
+the required hygiene and presentation standard for that checkpoint.
+Use Level1 and Subcategory as contextual guidance only; do not evaluate at those levels.
 
 You will receive:
-- Contextual information: checkpoint name, category name, category description (the standard to be met).
+- Level1 name and optional description
+- Subcategory name and optional description
+- Checkpoint name and checkpoint standard (description)
+- Shift info
 - One or two images: if a reference/standard image is provided, it is Image 1;
   the audit photo submitted by staff is always the last image.
 
@@ -40,14 +44,17 @@ Respond ONLY with valid JSON in this exact structure (no markdown, no extra text
   "compliance_score": <float between 0.0 and 100.0>,
   "confidence": <float between 0.0 and 1.0>,
   "observations": "<2-4 concise bullet points separated by newlines, each starting with '• '>",
-  "summary": "<one clear sentence verdict in 50 words or less>"
+  "summary": "<one clear sentence verdict, 40 words or less>"
 }"""
 
 
 def _build_image_user_content(
+    level1_name: str,
+    level1_description: str | None,
+    subcategory_name: str,
+    subcategory_description: str | None,
     checkpoint_name: str,
-    category_name: str,
-    category_description: str | None,
+    checkpoint_description: str | None,
     shift_type: str,
     shift_date: str,
     audit_image_b64: str,
@@ -55,21 +62,29 @@ def _build_image_user_content(
     reference_image_b64: str | None,
     reference_image_mime: str | None,
 ) -> list[dict]:
-    """Build the multimodal content list for the image analysis request."""
-    desc_text = f"\nCategory Standard: {category_description}" if category_description else ""
+    """Build the multimodal content list for the image analysis request. Reference image first (if present), audit image last."""
+    level1_block = f"Level1: {level1_name}"
+    if level1_description:
+        level1_block += f"\nLevel1 description: {level1_description}"
+    sub_block = f"Subcategory: {subcategory_name}"
+    if subcategory_description:
+        sub_block += f"\nSubcategory description: {subcategory_description}"
+    cp_block = f"Checkpoint: {checkpoint_name}"
+    if checkpoint_description:
+        cp_block += f"\nCheckpoint standard: {checkpoint_description}"
+
+    image_instruction = (
+        "Image 1 is the reference standard. Image 2 is the audit photo. Compare the audit photo against the reference.\n"
+        if reference_image_b64
+        else "No reference standard image available. Assess the audit photo independently.\n"
+    )
 
     text_block = {
         "type": "text",
         "text": (
-            f"Checkpoint: {checkpoint_name}\n"
-            f"Category: {category_name}{desc_text}\n"
+            f"{level1_block}\n\n{sub_block}\n\n{cp_block}\n\n"
             f"Shift: {shift_type} on {shift_date}\n\n"
-            + (
-                "Image 1 is the reference standard. Image 2 is the audit photo. "
-                "Compare the audit photo against the reference.\n"
-                if reference_image_b64
-                else "No reference standard image available. Assess the audit photo independently.\n"
-            )
+            f"{image_instruction}"
         ),
     }
 
@@ -116,41 +131,38 @@ class AIService:
         self,
         *,
         image_path: str,
+        level1_name: str,
+        level1_description: str | None,
+        subcategory_name: str,
+        subcategory_description: str | None,
         checkpoint_name: str,
-        category_name: str,
-        category_description: str | None,
+        checkpoint_description: str | None,
         shift_type: str,
         shift_date: str,
-        reference_image_path: str | None = None,
     ) -> AIAnalysisResult:
         """
-        Analyze an audit image against checkpoint/category context.
-        Returns AIAnalysisResult; status='FAILED' on any error (never raises).
+        Analyze an audit image against hierarchy context (Level1 -> Subcategory -> Checkpoint).
+        Evaluates only the checkpoint. Returns AIAnalysisResult; status='FAILED' on any error (never raises).
+        Output maps to audit_checkpoint_review (review_type=AI set by caller).
         """
         try:
-            # Read and encode audit image
             audit_bytes = Path(image_path).read_bytes()
             audit_b64 = base64.b64encode(audit_bytes).decode()
             audit_mime = _mime_from_path(image_path)
 
-            # Optionally read reference image (checkpoint standard)
-            ref_b64: str | None = None
-            ref_mime: str | None = None
-            if reference_image_path and Path(reference_image_path).exists():
-                ref_bytes = Path(reference_image_path).read_bytes()
-                ref_b64 = base64.b64encode(ref_bytes).decode()
-                ref_mime = _mime_from_path(reference_image_path)
-
             content = _build_image_user_content(
+                level1_name=level1_name,
+                level1_description=level1_description,
+                subcategory_name=subcategory_name,
+                subcategory_description=subcategory_description,
                 checkpoint_name=checkpoint_name,
-                category_name=category_name,
-                category_description=category_description,
+                checkpoint_description=checkpoint_description,
                 shift_type=shift_type,
                 shift_date=shift_date,
                 audit_image_b64=audit_b64,
                 audit_image_mime=audit_mime,
-                reference_image_b64=ref_b64,
-                reference_image_mime=ref_mime,
+                reference_image_b64=None,
+                reference_image_mime=None,
             )
 
             response = await self._client.chat.completions.create(
@@ -176,6 +188,7 @@ class AIService:
                 confidence = float(parsed.get("confidence", 0.0))
             except (TypeError, ValueError):
                 confidence = 0.0
+            confidence = max(0.0, min(1.0, confidence))
 
             return AIAnalysisResult(
                 status="COMPLETED",

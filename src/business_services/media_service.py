@@ -1,11 +1,12 @@
-"""Media storage and listing. Local path for now."""
+"""Media storage and listing. Local path for now. AI analysis inserts audit_checkpoint_review (AI)."""
 
 import asyncio
 from pathlib import Path
 from uuid import uuid4
 
 from src.api.dependencies import require_country_access, require_facility_access
-from src.database.repositories.audit_repository import AuditCheckpointCategoryRepository, AuditRepository
+from src.database.repositories.audit_repository import AuditRepository
+from src.database.repositories.audit_checkpoint_review_repository import AuditCheckpointReviewRepository
 from src.database.repositories.facility_repository import FacilityRepository
 from src.database.repositories.media_repository import MediaRepository
 from src.database.repositories.zone_repository import ZoneRepository
@@ -20,7 +21,7 @@ class MediaService(BaseBusinessService):
         super().__init__()
         self._media_repo: MediaRepository | None = None
         self._audit_repo: AuditRepository | None = None
-        self._audit_category_repo: AuditCheckpointCategoryRepository | None = None
+        self._review_repo: AuditCheckpointReviewRepository | None = None
         self._facility_repo: FacilityRepository | None = None
         self._zone_repo: ZoneRepository | None = None
         self._session_factory = None
@@ -30,7 +31,8 @@ class MediaService(BaseBusinessService):
         factory = get_container().get_postgres_service().get_session_factory()
         self._media_repo = MediaRepository(factory)
         self._audit_repo = AuditRepository(factory)
-        self._audit_category_repo = AuditCheckpointCategoryRepository(factory)
+        self._review_repo = AuditCheckpointReviewRepository(factory)
+        self._audit_repo.set_review_repository(self._review_repo)
         self._facility_repo = FacilityRepository(factory)
         self._zone_repo = ZoneRepository(factory)
         self._session_factory = factory
@@ -40,7 +42,7 @@ class MediaService(BaseBusinessService):
     def _close_service(self) -> None:
         self._media_repo = None
         self._audit_repo = None
-        self._audit_category_repo = None
+        self._review_repo = None
         self._facility_repo = None
         self._zone_repo = None
         self._session_factory = None
@@ -60,13 +62,13 @@ class MediaService(BaseBusinessService):
     async def save_upload(
         self,
         audit_id: str,
-        audit_checkpoint_category_id: str,
+        audit_checkpoint_id: str,
         file_content: bytes,
         filename: str,
         content_type: str | None,
         payload: dict,
     ) -> MediaEvidenceResponse:
-        if self._audit_repo is None or self._media_repo is None or self._audit_category_repo is None:
+        if self._media_repo is None or self._audit_repo is None or self._review_repo is None:
             raise RuntimeError("MediaService not initialized")
         from src.utils.validators import validate_image_filename, validate_image_content_type
         if not validate_image_filename(filename) or not validate_image_content_type(content_type):
@@ -78,33 +80,31 @@ class MediaService(BaseBusinessService):
         require_facility_access(audit.facility_id, payload)
         await self._ensure_facility_in_country(audit.facility_id, payload)
 
-        # Verify the category belongs to this audit and collect AI context
-        audit_cp = await self._audit_category_repo.get_audit_checkpoint_for_category(audit_checkpoint_category_id)
-        if not audit_cp or audit_cp.audit_id != audit_id:
-            raise NotFoundError("AuditCheckpointCategory", audit_checkpoint_category_id)
-
-        acc = await self._audit_category_repo.get_by_id(audit_checkpoint_category_id)
-        if not acc:
-            raise NotFoundError("AuditCheckpointCategory", audit_checkpoint_category_id)
+        cp = await self._audit_repo.get_checkpoint_by_id(audit_checkpoint_id, audit_id)
+        if not cp:
+            raise NotFoundError("AuditCheckpoint", audit_checkpoint_id)
 
         storage_path = get_instance().storage_path
         ext = Path(filename).suffix.lower() or ".jpg"
-        safe_name = f"{audit_id}_{audit_checkpoint_category_id}_{uuid4().hex}{ext}"
+        safe_name = f"{audit_id}_{audit_checkpoint_id}_{uuid4().hex}{ext}"
         path = Path(storage_path) / safe_name
         path.write_bytes(file_content)
 
-        media_row = await self._media_repo.create(audit_id, audit_checkpoint_category_id, str(path))
+        media_row = await self._media_repo.create(audit_id, audit_checkpoint_id, str(path))
 
-        # Fire-and-forget: run AI image analysis in background (non-blocking)
+        sa = cp.audit_sub_area
+        aa = sa.audit_area
         asyncio.create_task(
             self._run_ai_analysis(
                 media_id=media_row.id,
-                audit_checkpoint_category_id=audit_checkpoint_category_id,
+                audit_checkpoint_id=audit_checkpoint_id,
                 image_path=str(path),
-                checkpoint_name=audit_cp.checkpoint_name,
-                reference_image_path=audit_cp.image_url,
-                category_id=acc.category_id,
-                category_name=acc.category_name,
+                level1_name=aa.area_name,
+                level1_description=None,
+                subcategory_name=sa.sub_area_name,
+                subcategory_description=None,
+                checkpoint_name=cp.checkpoint_name,
+                checkpoint_description=cp.description,
                 shift_type=audit.shift_type,
                 shift_date=str(audit.shift_date),
             )
@@ -115,46 +115,35 @@ class MediaService(BaseBusinessService):
         self,
         *,
         media_id: str,
-        audit_checkpoint_category_id: str,
+        audit_checkpoint_id: str,
         image_path: str,
+        level1_name: str,
+        level1_description: str | None,
+        subcategory_name: str,
+        subcategory_description: str | None,
         checkpoint_name: str,
-        reference_image_path: str,
-        category_id: str,
-        category_name: str,
+        checkpoint_description: str | None,
         shift_type: str,
         shift_date: str,
     ) -> None:
-        """Background coroutine: fetch category description, call AI, persist to media + category snapshot."""
-        self.logger.info("[AI] Background analysis started for media %s (%s)", media_id, category_name)
-        if self._media_repo is None or self._audit_category_repo is None:
+        """Background: call AI, update media row, insert audit_checkpoint_review (review_type=AI)."""
+        self.logger.info("[AI] Background analysis started for media %s (%s)", media_id, checkpoint_name)
+        if self._media_repo is None or self._review_repo is None:
             return
         try:
             from src.business_services.ai_service import get_ai_service
-            from src.database.postgres.schema.category_schema import CategorySchema
-            from sqlalchemy import select
-
-            if self._session_factory is None:
-                return
-
-            # Fetch live category description (snapshot stores only name, not description)
-            category_description: str | None = None
-            async with self._session_factory() as session:
-                cat_result = await session.execute(
-                    select(CategorySchema).where(CategorySchema.id == category_id)
-                )
-                cat_row = cat_result.scalar_one_or_none()
-                if cat_row:
-                    category_description = cat_row.description
 
             ai_svc = get_ai_service()
             result = await ai_svc.analyze_image(
                 image_path=image_path,
+                level1_name=level1_name,
+                level1_description=level1_description,
+                subcategory_name=subcategory_name,
+                subcategory_description=subcategory_description,
                 checkpoint_name=checkpoint_name,
-                category_name=category_name,
-                category_description=category_description,
+                checkpoint_description=checkpoint_description,
                 shift_type=shift_type,
                 shift_date=shift_date,
-                reference_image_path=reference_image_path if Path(reference_image_path).exists() else None,
             )
 
             await self._media_repo.update_ai_result(
@@ -167,14 +156,17 @@ class MediaService(BaseBusinessService):
                 ai_analyzed_at=result.analyzed_at,
                 ai_compliance_score=result.compliance_score,
             )
-            await self._audit_category_repo.update_ai_snapshot(
-                audit_checkpoint_category_id,
-                ai_latest_media_id=media_id,
-                ai_status=result.status,
-                ai_compliant=result.compliant,
-                ai_summary=result.summary,
-                ai_compliance_score=result.compliance_score,
-            )
+            if result.status == "COMPLETED":
+                await self._review_repo.insert(
+                    audit_checkpoint_id=audit_checkpoint_id,
+                    review_type="AI",
+                    compliant=result.compliant,
+                    score=result.compliance_score,
+                    confidence=result.confidence,
+                    remarks=result.summary,
+                    model_version=get_instance().litellm_vision_model,
+                    created_by=None,
+                )
             self.logger.info("[AI] Analysis %s for media %s", result.status, media_id)
         except Exception as exc:  # noqa: BLE001
             self.logger.error("[AI] Background analysis error for media %s: %s", media_id, exc)
@@ -188,16 +180,8 @@ class MediaService(BaseBusinessService):
                 ai_analyzed_at=None,
                 ai_compliance_score=None,
             )
-            await self._audit_category_repo.update_ai_snapshot(
-                audit_checkpoint_category_id,
-                ai_latest_media_id=media_id,
-                ai_status="FAILED",
-                ai_compliant=None,
-                ai_summary=None,
-            )
 
     async def get_image_ai_result(self, image_id: str, payload: dict) -> MediaEvidenceResponse | None:
-        """Return the current AI analysis state for a specific uploaded image."""
         if self._media_repo is None or self._audit_repo is None:
             raise RuntimeError("MediaService not initialized")
         row = await self._media_repo.get_by_id(image_id)

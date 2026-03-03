@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.database.postgres.schema.audit_schema import AuditCheckpointCategorySchema, AuditCheckpointSchema
+from src.database.postgres.schema.audit_checkpoint_schema import AuditCheckpointSchema
 from src.database.postgres.schema.media_schema import MediaEvidenceSchema
 from src.database.repositories.base_repository import BasePostgresRepository
 from src.database.repositories.schemas.media_schema import MediaEvidenceResponse
@@ -24,14 +24,14 @@ class MediaRepository(BasePostgresRepository[MediaEvidenceSchema]):
     async def create(
         self,
         audit_id: str,
-        audit_checkpoint_category_id: str,
+        audit_checkpoint_id: str,
         file_path: str,
     ) -> MediaEvidenceResponse:
         async with self._session_factory() as session:
             row = MediaEvidenceSchema(
                 id=str(uuid4()),
                 audit_id=audit_id,
-                audit_checkpoint_category_id=audit_checkpoint_category_id,
+                audit_checkpoint_id=audit_checkpoint_id,
                 file_path=file_path,
             )
             session.add(row)
@@ -40,27 +40,23 @@ class MediaRepository(BasePostgresRepository[MediaEvidenceSchema]):
             return self._schema_to_media(row)
 
     async def list_by_audit(self, audit_id: str) -> list[MediaEvidenceResponse]:
-        """Return all media for an audit, enriched with checkpoint/category names from the snapshot."""
+        """Return all media for an audit, with checkpoint_name from snapshot."""
         async with self._session_factory() as session:
             result = await session.execute(
                 select(MediaEvidenceSchema)
-                .options(
-                    selectinload(MediaEvidenceSchema.audit_checkpoint_category)
-                    .selectinload(AuditCheckpointCategorySchema.audit_checkpoint)
-                )
+                .options(selectinload(MediaEvidenceSchema.audit_checkpoint))
                 .where(MediaEvidenceSchema.audit_id == audit_id)
             )
             rows = result.scalars().all()
 
         items = []
         for r in rows:
-            acc = r.audit_checkpoint_category
+            cp = r.audit_checkpoint
             items.append(MediaEvidenceResponse(
                 id=r.id,
                 audit_id=r.audit_id,
-                audit_checkpoint_category_id=r.audit_checkpoint_category_id,
-                checkpoint_name=acc.audit_checkpoint.checkpoint_name if acc and acc.audit_checkpoint else None,
-                category_name=acc.category_name if acc else None,
+                audit_checkpoint_id=r.audit_checkpoint_id,
+                checkpoint_name=cp.checkpoint_name if cp else None,
                 file_path=r.file_path,
                 created_at=r.created_at,
                 ai_status=r.ai_status,

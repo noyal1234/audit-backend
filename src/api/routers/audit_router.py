@@ -1,4 +1,4 @@
-"""Audit execution: current (lazy), list, get, progress, complete/uncomplete category, finalize, reopen, delete, rebuild."""
+"""Audit execution: current (lazy), list, get, progress, checkpoint complete/uncomplete, manual review, finalize, reopen, delete, rebuild."""
 
 from datetime import date
 from typing import Annotated
@@ -9,7 +9,8 @@ from src.api.dependencies import RequireDealership, RequireEmployee
 from src.business_services.audit_service import get_audit_service
 from src.business_services.media_service import get_media_service
 from src.business_services.report_service import get_report_service
-from src.database.repositories.schemas.audit_schema import CategoryCompleteRequest, CategoryRemarksUpdate
+from src.database.repositories.schemas.audit_schema import CheckpointCompleteRequest
+from src.database.repositories.schemas.review_schema import ManualReviewRequest
 from src.exceptions.domain_exceptions import NotFoundError
 from src.utils.pagination import PaginationParams
 
@@ -23,7 +24,7 @@ async def get_current_audit(
     payload: Annotated[dict, RequireEmployee],
     audit_service: Annotated[any, Depends(get_audit_service)],
 ):
-    """Get or lazily create the audit for the current shift. Auto-snapshots all checkpoints and categories."""
+    """Get or lazily create the audit for the current shift. Snapshots area -> sub_area -> checkpoint hierarchy."""
     return await audit_service.get_or_create_current_audit(payload)
 
 
@@ -62,60 +63,58 @@ async def get_audit_progress(
     payload: Annotated[dict, RequireEmployee],
     audit_service: Annotated[any, Depends(get_audit_service)],
 ):
-    """Get audit progress: completion counts and percentage."""
+    """Get audit progress: checkpoint completion and compliance (effective review)."""
     return await audit_service.get_progress(audit_id, payload)
 
 
-@router.post("/{audit_id}/checkpoint-categories/{id}/complete")
-async def complete_category(
+@router.post("/{audit_id}/checkpoints/{checkpoint_id}/complete")
+async def complete_checkpoint(
     audit_id: str,
-    id: str,
+    checkpoint_id: str,
     payload: Annotated[dict, RequireEmployee],
     audit_service: Annotated[any, Depends(get_audit_service)],
-    body: CategoryCompleteRequest | None = None,
+    body: CheckpointCompleteRequest | None = None,
 ):
-    """Mark an audit checkpoint category as completed. Auto-updates checkpoint and audit status."""
-    data = body or CategoryCompleteRequest()
-    return await audit_service.complete_category(audit_id, id, data, payload)
+    """Mark an audit checkpoint as completed (is_completed=true). EMPLOYEE+."""
+    return await audit_service.mark_checkpoint_completed(audit_id, checkpoint_id, body, payload)
 
 
-@router.post("/{audit_id}/checkpoint-categories/{id}/uncomplete")
-async def uncomplete_category(
+@router.post("/{audit_id}/checkpoints/{checkpoint_id}/uncomplete")
+async def uncomplete_checkpoint(
     audit_id: str,
-    id: str,
-    payload: Annotated[dict, RequireEmployee],
-    audit_service: Annotated[any, Depends(get_audit_service)],
-):
-    """Unmark an audit checkpoint category. Reverses completion."""
-    return await audit_service.uncomplete_category(audit_id, id, payload)
-
-
-@router.patch("/{audit_id}/checkpoint-categories/{id}")
-async def update_category_remarks(
-    audit_id: str,
-    id: str,
-    body: CategoryRemarksUpdate,
+    checkpoint_id: str,
     payload: Annotated[dict, RequireEmployee],
     audit_service: Annotated[any, Depends(get_audit_service)],
 ):
-    """Update the remarks (review text) for a category. Does not change completion state. Use when audit is PENDING, IN_PROGRESS, or REOPENED."""
-    return await audit_service.update_category_remarks(audit_id, id, body, payload)
+    """Unmark an audit checkpoint (is_completed=false). EMPLOYEE+."""
+    return await audit_service.mark_checkpoint_incomplete(audit_id, checkpoint_id, payload)
 
 
-@router.post("/{audit_id}/checkpoint-categories/{audit_checkpoint_category_id}/image")
-async def upload_category_image(
+@router.patch("/{audit_id}/checkpoints/{checkpoint_id}/review")
+async def patch_checkpoint_review(
     audit_id: str,
-    audit_checkpoint_category_id: str,
+    checkpoint_id: str,
+    body: ManualReviewRequest,
+    payload: Annotated[dict, RequireDealership],
+    audit_service: Annotated[any, Depends(get_audit_service)],
+):
+    """Insert a manual review for the checkpoint (append-only). Blocked if audit is FINALIZED. DEALERSHIP+."""
+    return await audit_service.submit_manual_review(audit_id, checkpoint_id, body, payload)
+
+
+@router.post("/{audit_id}/checkpoints/{checkpoint_id}/image")
+async def upload_checkpoint_image(
+    audit_id: str,
+    checkpoint_id: str,
     payload: Annotated[dict, RequireEmployee],
     media_service: Annotated[any, Depends(get_media_service)],
     file: UploadFile = File(...),
 ):
-    """Upload an evidence image for a specific audit checkpoint category.
-    Triggers background AI compliance analysis immediately after upload."""
+    """Upload an evidence image for an audit checkpoint. Triggers background AI analysis (inserts AI review when done)."""
     content = await file.read()
     return await media_service.save_upload(
         audit_id=audit_id,
-        audit_checkpoint_category_id=audit_checkpoint_category_id,
+        audit_checkpoint_id=checkpoint_id,
         file_content=content,
         filename=file.filename or "image.jpg",
         content_type=file.content_type,
@@ -129,7 +128,7 @@ async def list_audit_images(
     payload: Annotated[dict, RequireEmployee],
     media_service: Annotated[any, Depends(get_media_service)],
 ):
-    """List all evidence images uploaded for an audit, grouped with checkpoint and category names."""
+    """List all evidence images for the audit (with checkpoint names from snapshot)."""
     return await media_service.list_audit_images(audit_id, payload)
 
 
@@ -165,7 +164,7 @@ async def rebuild_audit(
     payload: Annotated[dict, RequireDealership],
     audit_service: Annotated[any, Depends(get_audit_service)],
 ):
-    """Delete the audit and create a fresh one for same facility/shift with current snapshot. FINALIZED not allowed. DEALERSHIP+ required."""
+    """Delete the audit and create a fresh one for same facility/shift with current hierarchy. FINALIZED not allowed. DEALERSHIP+."""
     return await audit_service.rebuild_audit(audit_id, payload)
 
 
@@ -177,21 +176,13 @@ async def get_audit_report(
 ):
     """
     Generate a full AI compliance report for the given audit.
-
-    The report includes:
-    - Executive summary
-    - Compliance highlights
-    - Risk areas and non-compliances
-    - Root-cause observations
-    - Corrective action recommendations
-    - Shift pattern notes
-
-    Requires DEALERSHIP role or above. Report is generated on-demand (not cached).
+    Uses effective review (latest per checkpoint) for executive summary.
+    DEALERSHIP+.
     """
     return await report_service.generate_report(audit_id, payload)
 
 
-# --- DELETE before GET for same path /{audit_id} (avoids 405) ---
+# --- DELETE before GET for same path /{audit_id} ---
 
 @router.delete("/{audit_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_audit(
@@ -209,7 +200,7 @@ async def get_audit(
     payload: Annotated[dict, RequireEmployee],
     audit_service: Annotated[any, Depends(get_audit_service)],
 ):
-    """Get audit by ID with full snapshot detail."""
+    """Get audit by ID with full snapshot (areas -> sub_areas -> checkpoints) and effective reviews."""
     audit = await audit_service.get_by_id(audit_id, payload)
     if not audit:
         raise NotFoundError("Audit", audit_id)

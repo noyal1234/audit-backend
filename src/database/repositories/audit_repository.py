@@ -1,3 +1,5 @@
+"""Audit repository: snapshot tree (audit_area -> audit_sub_area -> audit_checkpoint)."""
+
 from datetime import date, datetime
 from uuid import uuid4
 
@@ -5,44 +7,74 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.database.postgres.schema.audit_schema import (
-    AuditCheckpointCategorySchema,
-    AuditCheckpointSchema,
-    AuditSchema,
-)
+from src.database.postgres.schema.audit_schema import AuditSchema
+from src.database.postgres.schema.audit_area_schema import AuditAreaSchema
+from src.database.postgres.schema.audit_sub_area_schema import AuditSubAreaSchema
+from src.database.postgres.schema.audit_checkpoint_schema import AuditCheckpointSchema
 from src.database.postgres.schema.facility_schema import FacilitySchema
 from src.database.postgres.schema.zone_schema import ZoneSchema
-from src.database.repositories.base_repository import BasePostgresRepository
 from src.database.repositories.schemas.audit_schema import (
-    AuditCheckpointCategoryResponse,
-    AuditCheckpointResponse,
     AuditCreate,
     AuditDetailResponse,
     AuditProgressResponse,
     AuditResponse,
+    AuditAreaResponse,
+    AuditSubAreaResponse,
+    AuditCheckpointResponse,
 )
+from src.database.repositories.schemas.area_schema import AreaWithChildrenResponse
+from src.database.repositories.schemas.review_schema import AuditCheckpointReviewResponse
+from src.database.repositories.base_repository import BasePostgresRepository
+from src.database.repositories.audit_checkpoint_review_repository import AuditCheckpointReviewRepository
 
 
 class AuditRepository(BasePostgresRepository[AuditSchema]):
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         super().__init__(session_factory, AuditSchema)
+        self._review_repo: AuditCheckpointReviewRepository | None = None
+
+    def set_review_repository(self, repo: AuditCheckpointReviewRepository) -> None:
+        self._review_repo = repo
 
     def _schema_to_audit(self, row: AuditSchema) -> AuditResponse:
         return AuditResponse.model_validate(row)
 
-    def _schema_to_detail(self, row: AuditSchema) -> AuditDetailResponse:
-        checkpoints = []
-        for acp in row.audit_checkpoints:
-            cats = [AuditCheckpointCategoryResponse.model_validate(c) for c in acp.categories]
-            checkpoints.append(AuditCheckpointResponse(
-                id=acp.id,
-                audit_id=acp.audit_id,
-                checkpoint_id=acp.checkpoint_id,
-                checkpoint_name=acp.checkpoint_name,
-                image_url=acp.image_url,
-                status_type=acp.status_type,
-                created_at=acp.created_at,
-                categories=cats,
+    def _build_detail(
+        self,
+        row: AuditSchema,
+        effective_reviews: list[AuditCheckpointReviewResponse] | None = None,
+    ) -> AuditDetailResponse:
+        review_by_cp = {r.audit_checkpoint_id: r for r in (effective_reviews or [])}
+        areas_out = []
+        for aa in row.audit_areas:
+            sub_areas_out = []
+            for sa in aa.sub_areas:
+                checkpoints_out = []
+                for cp in sa.checkpoints:
+                    er = review_by_cp.get(cp.id)
+                    checkpoints_out.append(AuditCheckpointResponse(
+                        id=cp.id,
+                        audit_sub_area_id=cp.audit_sub_area_id,
+                        checkpoint_name=cp.checkpoint_name,
+                        description=cp.description,
+                        is_completed=cp.is_completed,
+                        created_at=cp.created_at,
+                        updated_at=cp.updated_at,
+                        effective_review=er,
+                    ))
+                sub_areas_out.append(AuditSubAreaResponse(
+                    id=sa.id,
+                    audit_area_id=sa.audit_area_id,
+                    sub_area_name=sa.sub_area_name,
+                    created_at=sa.created_at,
+                    checkpoints=checkpoints_out,
+                ))
+            areas_out.append(AuditAreaResponse(
+                id=aa.id,
+                audit_id=aa.audit_id,
+                area_name=aa.area_name,
+                created_at=aa.created_at,
+                sub_areas=sub_areas_out,
             ))
         return AuditDetailResponse(
             id=row.id,
@@ -54,7 +86,7 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
             created_at=row.created_at,
             updated_at=row.updated_at,
             finalized_at=row.finalized_at,
-            audit_checkpoints=checkpoints,
+            audit_areas=areas_out,
         )
 
     async def get_by_id(self, id: str) -> AuditResponse | None:
@@ -66,15 +98,19 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
             result = await session.execute(
                 select(AuditSchema)
                 .options(
-                    selectinload(AuditSchema.audit_checkpoints)
-                    .selectinload(AuditCheckpointSchema.categories)
+                    selectinload(AuditSchema.audit_areas)
+                    .selectinload(AuditAreaSchema.sub_areas)
+                    .selectinload(AuditSubAreaSchema.checkpoints)
                 )
                 .where(AuditSchema.id == id)
             )
             row = result.scalar_one_or_none()
         if not row:
             return None
-        return self._schema_to_detail(row)
+        effective = []
+        if self._review_repo:
+            effective = await self._review_repo.get_effective_reviews_for_audit(id)
+        return self._build_detail(row, effective)
 
     async def find_by_facility_shift_date(
         self,
@@ -151,9 +187,9 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
         self,
         data: AuditCreate,
         created_by: str,
-        checkpoints_with_categories: list[dict],
+        hierarchy: list[AreaWithChildrenResponse],
     ) -> AuditDetailResponse:
-        """Create audit + snapshot all checkpoints and their categories in a single transaction."""
+        """Create audit + snapshot full tree (areas -> sub_areas -> checkpoints). No review rows."""
         async with self._session_factory() as session:
             audit_id = str(uuid4())
             audit = AuditSchema(
@@ -165,40 +201,30 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
                 created_by=created_by,
             )
             session.add(audit)
-            for cp in checkpoints_with_categories:
-                acp_id = str(uuid4())
-                acp = AuditCheckpointSchema(
-                    id=acp_id,
-                    audit_id=audit_id,
-                    checkpoint_id=cp["checkpoint_id"],
-                    checkpoint_name=cp["checkpoint_name"],
-                    image_url=cp["image_url"],
-                    status_type="PENDING",
-                )
-                session.add(acp)
-                for cat in cp.get("categories", []):
-                    acc = AuditCheckpointCategorySchema(
-                        id=str(uuid4()),
-                        audit_checkpoint_id=acp_id,
-                        category_id=cat["category_id"],
-                        category_name=cat["category_name"],
-                        is_completed=False,
-                    )
-                    session.add(acc)
+            for area in hierarchy:
+                aa_id = str(uuid4())
+                aa = AuditAreaSchema(id=aa_id, audit_id=audit_id, area_name=area.name)
+                session.add(aa)
+                for sub in area.sub_areas:
+                    sa_id = str(uuid4())
+                    sa = AuditSubAreaSchema(id=sa_id, audit_area_id=aa_id, sub_area_name=sub.name)
+                    session.add(sa)
+                    for cp in sub.checkpoints:
+                        acp = AuditCheckpointSchema(
+                            id=str(uuid4()),
+                            audit_sub_area_id=sa_id,
+                            checkpoint_name=cp.name,
+                            description=cp.description,
+                            is_completed=False,
+                        )
+                        session.add(acp)
             await session.commit()
-            result = await session.execute(
-                select(AuditSchema)
-                .options(
-                    selectinload(AuditSchema.audit_checkpoints)
-                    .selectinload(AuditCheckpointSchema.categories)
-                )
-                .where(AuditSchema.id == audit_id)
-            )
-            row = result.scalar_one()
-        return self._schema_to_detail(row)
+        detail = await self.get_detail(audit_id)
+        if not detail:
+            raise RuntimeError("Audit created but get_detail returned None")
+        return detail
 
     async def delete(self, audit_id: str) -> bool:
-        """Delete audit by id. Cascade removes audit_checkpoint and audit_checkpoint_category. Returns False if not found."""
         async with self._session_factory() as session:
             result = await session.execute(select(AuditSchema).where(AuditSchema.id == audit_id))
             row = result.scalar_one_or_none()
@@ -208,7 +234,9 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
             await session.commit()
             return True
 
-    async def update_status(self, id: str, status_type: str, finalized_at: datetime | None = None) -> AuditResponse | None:
+    async def update_status(
+        self, id: str, status_type: str, finalized_at: datetime | None = None
+    ) -> AuditResponse | None:
         async with self._session_factory() as session:
             result = await session.execute(select(AuditSchema).where(AuditSchema.id == id))
             row = result.scalar_one_or_none()
@@ -221,216 +249,74 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
             return self._schema_to_audit(row)
 
     async def get_progress(self, id: str) -> AuditProgressResponse | None:
-        async with self._session_factory() as session:
-            result = await session.execute(
-                select(AuditSchema)
-                .options(
-                    selectinload(AuditSchema.audit_checkpoints)
-                    .selectinload(AuditCheckpointSchema.categories)
-                )
-                .where(AuditSchema.id == id)
-            )
-            row = result.scalar_one_or_none()
-            if not row:
-                return None
-            total_cp = len(row.audit_checkpoints)
-            completed_cp = sum(1 for cp in row.audit_checkpoints if cp.status_type == "COMPLETED")
-            total_cat = sum(len(cp.categories) for cp in row.audit_checkpoints)
-            completed_cat = sum(
-                1 for cp in row.audit_checkpoints for c in cp.categories if c.is_completed
-            )
-            pct = (completed_cat / total_cat * 100.0) if total_cat > 0 else 0.0
+        detail = await self.get_detail(id)
+        if not detail:
+            return None
+        total = 0
+        completed = 0
+        for aa in detail.audit_areas:
+            for sa in aa.sub_areas:
+                for cp in sa.checkpoints:
+                    total += 1
+                    if cp.is_completed:
+                        completed += 1
+        pct = (completed / total * 100.0) if total > 0 else 0.0
+        compliant_count = 0
+        for aa in detail.audit_areas:
+            for sa in aa.sub_areas:
+                for cp in sa.checkpoints:
+                    if cp.effective_review and cp.effective_review.compliant:
+                        compliant_count += 1
+        compliance_pct = (compliant_count / total * 100.0) if total > 0 else 0.0
         return AuditProgressResponse(
-            audit_id=row.id,
-            status_type=row.status_type,
-            total_checkpoints=total_cp,
-            completed_checkpoints=completed_cp,
-            total_categories=total_cat,
-            completed_categories=completed_cat,
+            audit_id=id,
+            status_type=detail.status_type,
+            total_checkpoints=total,
+            completed_checkpoints=completed,
             completion_percentage=round(pct, 2),
+            compliant_checkpoints=compliant_count,
+            compliance_percentage=round(compliance_pct, 2),
         )
 
-
-class AuditCheckpointCategoryRepository:
-    """Handles completion of individual audit checkpoint categories."""
-
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
-        self._session_factory = session_factory
-
-    async def get_by_id(self, id: str) -> AuditCheckpointCategoryResponse | None:
+    async def get_checkpoint_by_id(self, checkpoint_id: str, audit_id: str) -> AuditCheckpointSchema | None:
+        """Return audit_checkpoint if it belongs to this audit (for PATCH review / AI context). Loads audit_sub_area and audit_area for hierarchy names."""
         async with self._session_factory() as session:
             result = await session.execute(
-                select(AuditCheckpointCategorySchema).where(AuditCheckpointCategorySchema.id == id)
-            )
-            row = result.scalar_one_or_none()
-        return AuditCheckpointCategoryResponse.model_validate(row) if row else None
-
-    async def get_audit_checkpoint_for_category(self, category_id: str) -> AuditCheckpointResponse | None:
-        """Return the audit checkpoint snapshot that owns this category (for ownership checks and AI context)."""
-        async with self._session_factory() as session:
-            result = await session.execute(
-                select(AuditCheckpointCategorySchema)
-                .options(selectinload(AuditCheckpointCategorySchema.audit_checkpoint))
-                .where(AuditCheckpointCategorySchema.id == category_id)
-            )
-            cat_row = result.scalar_one_or_none()
-            if not cat_row or not cat_row.audit_checkpoint:
-                return None
-            cp = cat_row.audit_checkpoint
-        return AuditCheckpointResponse(
-            id=cp.id,
-            audit_id=cp.audit_id,
-            checkpoint_id=cp.checkpoint_id,
-            checkpoint_name=cp.checkpoint_name,
-            image_url=cp.image_url,
-            status_type=cp.status_type,
-            created_at=cp.created_at,
-            categories=[],
-        )
-
-    async def get_with_checkpoint(self, id: str) -> tuple[AuditCheckpointCategorySchema | None, AuditCheckpointSchema | None]:
-        """Return both the category row and its parent checkpoint (for status computation)."""
-        async with self._session_factory() as session:
-            result = await session.execute(
-                select(AuditCheckpointCategorySchema)
+                select(AuditCheckpointSchema)
                 .options(
-                    selectinload(AuditCheckpointCategorySchema.audit_checkpoint)
-                    .selectinload(AuditCheckpointSchema.categories)
+                    selectinload(AuditCheckpointSchema.audit_sub_area).selectinload(AuditSubAreaSchema.audit_area)
                 )
-                .where(AuditCheckpointCategorySchema.id == id)
+                .join(AuditSubAreaSchema, AuditCheckpointSchema.audit_sub_area_id == AuditSubAreaSchema.id)
+                .join(AuditAreaSchema, AuditSubAreaSchema.audit_area_id == AuditAreaSchema.id)
+                .where(
+                    AuditCheckpointSchema.id == checkpoint_id,
+                    AuditAreaSchema.audit_id == audit_id,
+                )
             )
-            cat_row = result.scalar_one_or_none()
-            if not cat_row:
-                return None, None
-            return cat_row, cat_row.audit_checkpoint
+            return result.scalar_one_or_none()
 
-    async def mark_complete(
-        self,
-        id: str,
-        completed_by: str,
-        completed_at: datetime,
-        remarks: str | None = None,
-    ) -> AuditCheckpointCategoryResponse | None:
-        async with self._session_factory() as session:
-            result = await session.execute(
-                select(AuditCheckpointCategorySchema).where(AuditCheckpointCategorySchema.id == id)
-            )
-            row = result.scalar_one_or_none()
-            if not row:
-                return None
-            row.is_completed = True
-            row.completed_by = completed_by
-            row.completed_at = completed_at
-            if remarks is not None:
-                row.remarks = remarks
-            await session.commit()
-            await session.refresh(row)
-            return AuditCheckpointCategoryResponse.model_validate(row)
-
-    async def mark_uncomplete(self, id: str) -> AuditCheckpointCategoryResponse | None:
-        async with self._session_factory() as session:
-            result = await session.execute(
-                select(AuditCheckpointCategorySchema).where(AuditCheckpointCategorySchema.id == id)
-            )
-            row = result.scalar_one_or_none()
-            if not row:
-                return None
-            row.is_completed = False
-            row.completed_by = None
-            row.completed_at = None
-            row.remarks = None
-            await session.commit()
-            await session.refresh(row)
-            return AuditCheckpointCategoryResponse.model_validate(row)
-
-    async def update_remarks(self, id: str, remarks: str | None) -> AuditCheckpointCategoryResponse | None:
-        """Update only the remarks field. Does not change is_completed or completed_by/completed_at."""
-        async with self._session_factory() as session:
-            result = await session.execute(
-                select(AuditCheckpointCategorySchema).where(AuditCheckpointCategorySchema.id == id)
-            )
-            row = result.scalar_one_or_none()
-            if not row:
-                return None
-            row.remarks = remarks
-            await session.commit()
-            await session.refresh(row)
-            return AuditCheckpointCategoryResponse.model_validate(row)
-
-    async def update_ai_snapshot(
-        self,
-        audit_checkpoint_category_id: str,
-        *,
-        ai_latest_media_id: str,
-        ai_status: str,
-        ai_compliant: bool | None,
-        ai_summary: str | None,
-        ai_compliance_score: float | None = None,
+    async def mark_checkpoint_completed(
+        self, audit_checkpoint_id: str, remarks: str | None = None
     ) -> bool:
-        """Update the category-level AI snapshot (latest media + state). Returns True if category found.
-        ai_compliance_score is only set when provided (e.g. on COMPLETED); on FAILED do not overwrite."""
         async with self._session_factory() as session:
             result = await session.execute(
-                select(AuditCheckpointCategorySchema).where(
-                    AuditCheckpointCategorySchema.id == audit_checkpoint_category_id
-                )
+                select(AuditCheckpointSchema).where(AuditCheckpointSchema.id == audit_checkpoint_id)
             )
             row = result.scalar_one_or_none()
             if not row:
                 return False
-            row.ai_latest_media_id = ai_latest_media_id
-            row.ai_status = ai_status
-            row.ai_compliant = ai_compliant
-            row.ai_summary = ai_summary
-            if ai_compliance_score is not None:
-                row.ai_compliance_score = ai_compliance_score
+            row.is_completed = True
             await session.commit()
             return True
 
-    async def update_checkpoint_status(self, audit_checkpoint_id: str) -> str:
-        """Recompute checkpoint status based on its categories. Returns new status."""
+    async def mark_checkpoint_incomplete(self, audit_checkpoint_id: str) -> bool:
         async with self._session_factory() as session:
             result = await session.execute(
-                select(AuditCheckpointSchema)
-                .options(selectinload(AuditCheckpointSchema.categories))
-                .where(AuditCheckpointSchema.id == audit_checkpoint_id)
+                select(AuditCheckpointSchema).where(AuditCheckpointSchema.id == audit_checkpoint_id)
             )
-            cp = result.scalar_one_or_none()
-            if not cp:
-                return "PENDING"
-            all_done = all(c.is_completed for c in cp.categories) if cp.categories else False
-            new_status = "COMPLETED" if all_done else "PENDING"
-            if cp.status_type != new_status:
-                cp.status_type = new_status
-                await session.commit()
-            return new_status
-
-    async def recompute_audit_status(self, audit_id: str) -> str:
-        """Recompute audit status based on all checkpoints. Returns new status."""
-        async with self._session_factory() as session:
-            result = await session.execute(
-                select(AuditSchema)
-                .options(selectinload(AuditSchema.audit_checkpoints))
-                .where(AuditSchema.id == audit_id)
-            )
-            audit = result.scalar_one_or_none()
-            if not audit:
-                return "PENDING"
-            if audit.status_type == "FINALIZED":
-                return "FINALIZED"
-            cps = audit.audit_checkpoints
-            if not cps:
-                return audit.status_type
-            completed = sum(1 for cp in cps if cp.status_type == "COMPLETED")
-            if completed == 0:
-                new_status = "PENDING"
-            elif completed == len(cps):
-                new_status = "COMPLETED"
-            else:
-                new_status = "IN_PROGRESS"
-            if audit.status_type == "REOPENED" and new_status in ("PENDING", "IN_PROGRESS"):
-                new_status = "REOPENED"
-            if audit.status_type != new_status:
-                audit.status_type = new_status
-                await session.commit()
-            return new_status
+            row = result.scalar_one_or_none()
+            if not row:
+                return False
+            row.is_completed = False
+            await session.commit()
+            return True

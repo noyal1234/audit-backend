@@ -4,6 +4,17 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field
 
+
+class CountryMini(BaseModel):
+    id: str
+    name: str
+
+
+class ZoneMini(BaseModel):
+    id: str
+    name: str
+    country: CountryMini | None = None
+
 # Basic phone pattern: optional +, digits, spaces, hyphens, parentheses
 PHONE_PATTERN = r"^\+?[\d\s\-\(\)]{8,50}$"
 
@@ -36,6 +47,7 @@ class FacilityUpdate(BaseModel):
 class FacilityResponse(BaseModel):
     id: str
     zone_id: str
+    zone: ZoneMini | None = None
     user_id: str | None
     name: str
     code: str | None

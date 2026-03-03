@@ -8,16 +8,20 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from src.database.base import Base
+from src.database.postgres.schema.area_schema import AreaSchema  # noqa: F401
+from src.database.postgres.schema.audit_area_schema import AuditAreaSchema  # noqa: F401
+from src.database.postgres.schema.audit_checkpoint_review_schema import AuditCheckpointReviewSchema  # noqa: F401
+from src.database.postgres.schema.audit_checkpoint_schema import AuditCheckpointSchema  # noqa: F401
+from src.database.postgres.schema.audit_schema import AuditSchema  # noqa: F401
+from src.database.postgres.schema.audit_sub_area_schema import AuditSubAreaSchema  # noqa: F401
 from src.database.postgres.schema.auth_session_schema import AuthSessionSchema  # noqa: F401
-from src.database.postgres.schema.audit_schema import AuditCheckpointCategorySchema, AuditCheckpointSchema, AuditSchema  # noqa: F401
-from src.database.postgres.schema.category_schema import CategorySchema  # noqa: F401
 from src.database.postgres.schema.checkpoint_schema import CheckpointSchema  # noqa: F401
-from src.database.postgres.schema.checkpoint_category_schema import CheckpointCategorySchema  # noqa: F401
 from src.database.postgres.schema.country_schema import CountrySchema  # noqa: F401
 from src.database.postgres.schema.facility_schema import FacilitySchema  # noqa: F401
 from src.database.postgres.schema.media_schema import MediaEvidenceSchema  # noqa: F401
 from src.database.postgres.schema.shift_schema import ShiftConfigSchema  # noqa: F401
 from src.database.postgres.schema.staff_schema import StaffSchema  # noqa: F401
+from src.database.postgres.schema.sub_area_schema import SubAreaSchema  # noqa: F401
 from src.database.postgres.schema.user_schema import UserSchema  # noqa: F401
 from src.database.postgres.schema.zone_schema import ZoneSchema  # noqa: F401
 
