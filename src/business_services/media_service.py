@@ -88,9 +88,18 @@ class MediaService(BaseBusinessService):
         ext = Path(filename).suffix.lower() or ".jpg"
         safe_name = f"{audit_id}_{audit_checkpoint_id}_{uuid4().hex}{ext}"
         path = Path(storage_path) / safe_name
-        path.write_bytes(file_content)
 
-        media_row = await self._media_repo.create(audit_id, audit_checkpoint_id, str(path))
+        existing = await self._media_repo.get_by_audit_checkpoint_id(audit_checkpoint_id)
+        if existing:
+            old_path = Path(existing.file_path)
+            if old_path.exists():
+                old_path.unlink(missing_ok=True)
+            path.write_bytes(file_content)
+            updated = await self._media_repo.update_file_and_reset_ai(existing.id, str(path))
+            media_row = updated if updated else existing
+        else:
+            path.write_bytes(file_content)
+            media_row = await self._media_repo.create(audit_id, audit_checkpoint_id, str(path))
 
         sa = cp.audit_sub_area
         aa = sa.audit_area
@@ -166,6 +175,7 @@ class MediaService(BaseBusinessService):
                     remarks=result.summary,
                     model_version=get_instance().litellm_vision_model,
                     created_by=None,
+                    media_id=media_id,
                 )
             self.logger.info("[AI] Analysis %s for media %s", result.status, media_id)
         except Exception as exc:  # noqa: BLE001
@@ -202,6 +212,36 @@ class MediaService(BaseBusinessService):
         require_facility_access(audit.facility_id, payload)
         await self._ensure_facility_in_country(audit.facility_id, payload)
         return await self._media_repo.list_by_audit(audit_id)
+
+    async def get_image_file(self, image_id: str, payload: dict) -> tuple[str, str] | None:
+        """Return (absolute_file_path, media_type) for streaming the image. None if not found or access denied. Path is validated to be under storage_path."""
+        if self._media_repo is None or self._audit_repo is None:
+            raise RuntimeError("MediaService not initialized")
+        row = await self._media_repo.get_by_id(image_id)
+        if not row:
+            return None
+        audit = await self._audit_repo.get_by_id(row.audit_id)
+        if audit:
+            require_facility_access(audit.facility_id, payload)
+            await self._ensure_facility_in_country(audit.facility_id, payload)
+        storage_root = Path(get_instance().storage_path).resolve()
+        path = Path(row.file_path).resolve()
+        if not path.is_file():
+            return None
+        try:
+            path.relative_to(storage_root)
+        except ValueError:
+            return None
+        ext = path.suffix.lower()
+        media_type = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".webp": "image/webp",
+            ".heic": "image/heic",
+            ".heif": "image/heif",
+        }.get(ext, "image/jpeg")
+        return (str(path), media_type)
 
     async def delete_image(self, image_id: str, payload: dict) -> bool:
         if self._media_repo is None:

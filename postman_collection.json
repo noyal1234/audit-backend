@@ -1087,7 +1087,8 @@
                 { "key": "date_to", "value": "2026-12-31" }
               ]
             }
-          }
+          },
+          "response": [{ "name": "Example", "status": "OK", "code": 200, "body": "{\n  \"total_audits\": 0,\n  \"total_facilities\": 0,\n  \"audits_completed\": 0,\n  \"audits_in_progress\": 0,\n  \"completion_percent\": 0.0,\n  \"compliance_percent\": 0.0,\n  \"average_score\": 0.0,\n  \"monthly_trend\": [\n    { \"month\": \"2026-01\", \"completion_percent\": 0.0, \"compliance_percent\": 0.0 }\n  ]\n}" }]
         },
         {
           "name": "Country Summary (filtered by zone)",
@@ -1113,7 +1114,8 @@
               "path": ["analytics", "zone-summary"],
               "query": [{ "key": "zone_id", "value": "{{zoneId}}" }]
             }
-          }
+          },
+          "response": [{ "name": "Example", "status": "OK", "code": 200, "body": "{\n  \"zone_id\": \"\",\n  \"audit_count\": 0,\n  \"completion_percent\": 0.0,\n  \"compliance_percent\": 0.0,\n  \"average_score\": 0.0,\n  \"facility_ranking\": [\n    { \"facility_id\": \"\", \"facility_name\": \"\", \"compliance_percent\": 0.0, \"average_score\": 0.0 }\n  ]\n}" }]
         },
         {
           "name": "Facility Summary",
@@ -1126,7 +1128,8 @@
               "path": ["analytics", "facility-summary"],
               "query": [{ "key": "facility_id", "value": "{{dealershipId}}" }]
             }
-          }
+          },
+          "response": [{ "name": "Example", "status": "OK", "code": 200, "body": "{\n  \"facility_id\": \"\",\n  \"shift_performance\": [\n    { \"shift_type\": \"DAY\", \"total_checkpoints\": 0, \"completed_checkpoints\": 0, \"compliant_checkpoints\": 0, \"completion_percent\": 0.0, \"compliance_percent\": 0.0, \"average_score\": 0.0 }\n  ],\n  \"checkpoint_compliance\": [\n    { \"checkpoint_name\": \"\", \"total_occurrences\": 0, \"completed\": 0, \"compliant\": 0, \"completion_percent\": 0.0, \"compliance_percent\": 0.0, \"average_score\": 0.0 }\n  ],\n  \"failure_rate_per_checkpoint\": [\n    { \"checkpoint_name\": \"\", \"total_checkpoints\": 0, \"non_compliant_count\": 0, \"failure_rate\": 0.0 }\n  ]\n}" }]
         },
         {
           "name": "Trends (Monthly)",
@@ -1139,7 +1142,8 @@
               "path": ["analytics", "trends"],
               "query": [{ "key": "period", "value": "monthly" }]
             }
-          }
+          },
+          "response": [{ "name": "Example", "status": "OK", "code": 200, "body": "{\n  \"period\": \"monthly\",\n  \"data\": [\n    { \"period\": \"2026-01\", \"completion_percent\": 0.0, \"compliance_percent\": 0.0, \"total_checkpoints\": 0, \"completed_checkpoints\": 0, \"compliant_checkpoints\": 0 }\n  ]\n}" }]
         },
         {
           "name": "Trends (Daily)",
@@ -1158,7 +1162,7 @@
           }
         },
         {
-          "name": "Category Breakdown",
+          "name": "Checkpoint Breakdown (category-breakdown)",
           "request": {
             "method": "GET",
             "header": [],
@@ -1168,7 +1172,8 @@
               "path": ["analytics", "category-breakdown"],
               "query": [{ "key": "facility_id", "value": "{{dealershipId}}" }]
             }
-          }
+          },
+          "response": [{ "name": "Example", "status": "OK", "code": 200, "body": "[\n  { \"checkpoint_name\": \"\", \"compliance_percent\": 0.0, \"total_occurrences\": 0, \"average_score\": 0.0 }\n]" }]
         },
         {
           "name": "Top Issues",
@@ -1181,7 +1186,8 @@
               "path": ["analytics", "top-issues"],
               "query": [{ "key": "limit", "value": "10" }]
             }
-          }
+          },
+          "response": [{ "name": "Example", "status": "OK", "code": 200, "body": "[\n  { \"checkpoint_name\": \"\", \"non_compliant_count\": 0, \"total_occurrences\": 0, \"failure_rate\": 0.0 }\n]" }]
         }
       ]
     },
@@ -1301,6 +1307,15 @@
             "header": [],
             "description": "Returns AI analysis for the image: ai_status (PENDING|COMPLETED|FAILED), ai_compliant, ai_compliance_score (0.0-100.0), ai_confidence, ai_observations, ai_summary, ai_analyzed_at.",
             "url": { "raw": "{{baseUrl}}/images/{{imageId}}/ai-result", "host": ["{{baseUrl}}"], "path": ["images", "{{imageId}}", "ai-result"] }
+          }
+        },
+        {
+          "name": "Get Image by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Returns the evidence image file by media_evidence id. Same access as AI result (EMPLOYEE+ with facility access). Response is the image bytes (e.g. image/jpeg).",
+            "url": { "raw": "{{baseUrl}}/images/{{imageId}}", "host": ["{{baseUrl}}"], "path": ["images", "{{imageId}}"] }
           }
         },
         {

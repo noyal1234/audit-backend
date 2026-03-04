@@ -21,7 +21,7 @@ async def country_summary(
     date_to: date | None = None,
     shift_type: str | None = None,
 ):
-    """Country-level summary: total audits, facilities, completion counts, compliance %, monthly trend."""
+    """Country-level summary: total audits, facilities, completion %, compliance % (review-based), average_score, monthly trend."""
     return await dashboard_service.country_summary(
         payload, zone_id=zone_id, facility_id=facility_id,
         date_from=date_from, date_to=date_to, shift_type=shift_type,
@@ -37,7 +37,7 @@ async def zone_summary(
     date_to: date | None = None,
     shift_type: str | None = None,
 ):
-    """Zone summary: audit count, compliance %, facility ranking by compliance."""
+    """Zone summary: audit count, completion %, compliance % (review-based), average_score, facility ranking by compliance."""
     return await dashboard_service.zone_summary(
         payload, zone_id=zone_id,
         date_from=date_from, date_to=date_to, shift_type=shift_type,
@@ -53,7 +53,7 @@ async def facility_summary(
     date_to: date | None = None,
     shift_type: str | None = None,
 ):
-    """Facility summary: shift performance, category compliance, failure rate per checkpoint."""
+    """Facility summary: shift performance, checkpoint compliance (review-based), failure rate per checkpoint (non-compliance)."""
     return await dashboard_service.facility_summary(
         payload, facility_id=facility_id,
         date_from=date_from, date_to=date_to, shift_type=shift_type,
@@ -71,7 +71,7 @@ async def audit_trends(
     shift_type: str | None = None,
     period: str = "monthly",
 ):
-    """Audit compliance trends. Period: daily, weekly, or monthly."""
+    """Audit completion and compliance trends. Period: daily, weekly, or monthly."""
     return await dashboard_service.trends(
         payload, period=period, zone_id=zone_id, facility_id=facility_id,
         date_from=date_from, date_to=date_to, shift_type=shift_type,
@@ -88,7 +88,7 @@ async def category_breakdown(
     date_to: date | None = None,
     shift_type: str | None = None,
 ):
-    """Category compliance breakdown across all audits."""
+    """Checkpoint compliance breakdown (review-based) across all audits. Path kept as category-breakdown."""
     return await dashboard_service.category_breakdown(
         payload, zone_id=zone_id, facility_id=facility_id,
         date_from=date_from, date_to=date_to, shift_type=shift_type,
@@ -106,7 +106,7 @@ async def top_issues(
     shift_type: str | None = None,
     limit: int = 10,
 ):
-    """Top non-completed checkpoint+category combinations by failure count."""
+    """Top checkpoints by non-compliance count (latest review.compliant = false). Sorted by failure count DESC."""
     return await dashboard_service.top_issues(
         payload, zone_id=zone_id, facility_id=facility_id,
         date_from=date_from, date_to=date_to, shift_type=shift_type, limit=limit,

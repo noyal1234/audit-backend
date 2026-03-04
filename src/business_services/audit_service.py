@@ -189,6 +189,31 @@ class AuditService(BaseBusinessService):
             raise NotFoundError("Audit", audit_id)
         return progress
 
+    # --- Auto status: COMPLETED when all checkpoints done; IN_PROGRESS when not ---
+
+    async def _recalculate_status(self, audit_id: str) -> None:
+        """Set audit to COMPLETED if all checkpoints completed, else to IN_PROGRESS. Never touch FINALIZED."""
+        if self._audit_repo is None:
+            return
+        audit = await self._audit_repo.get_by_id(audit_id)
+        if not audit:
+            return
+        if audit.status_type == "FINALIZED":
+            return
+        progress = await self._audit_repo.get_progress(audit_id)
+        if not progress:
+            return
+        total = progress.total_checkpoints
+        completed = progress.completed_checkpoints
+        if total == 0:
+            return
+        if completed == total:
+            if audit.status_type != "COMPLETED":
+                await self._audit_repo.update_status(audit_id, "COMPLETED", None)
+        else:
+            if audit.status_type in ("PENDING", "COMPLETED", "REOPENED"):
+                await self._audit_repo.update_status(audit_id, "IN_PROGRESS", None)
+
     # --- Checkpoint completion (EMPLOYEE+) ---
 
     async def mark_checkpoint_completed(
@@ -216,6 +241,7 @@ class AuditService(BaseBusinessService):
         )
         if not ok:
             raise NotFoundError("AuditCheckpoint", checkpoint_id)
+        await self._recalculate_status(audit_id)
         detail = await self._audit_repo.get_detail(audit_id)
         if not detail:
             raise NotFoundError("Audit", audit_id)
@@ -243,6 +269,7 @@ class AuditService(BaseBusinessService):
         ok = await self._audit_repo.mark_checkpoint_incomplete(checkpoint_id)
         if not ok:
             raise NotFoundError("AuditCheckpoint", checkpoint_id)
+        await self._recalculate_status(audit_id)
         detail = await self._audit_repo.get_detail(audit_id)
         if not detail:
             raise NotFoundError("Audit", audit_id)
@@ -272,6 +299,7 @@ class AuditService(BaseBusinessService):
         if not cp:
             raise NotFoundError("AuditCheckpoint", checkpoint_id)
 
+        existing_media = await self._media_repo.get_by_audit_checkpoint_id(checkpoint_id) if self._media_repo else None
         await self._review_repo.insert(
             audit_checkpoint_id=checkpoint_id,
             review_type="MANUAL",
@@ -281,6 +309,7 @@ class AuditService(BaseBusinessService):
             remarks=data.remarks,
             model_version=None,
             created_by=payload["sub"],
+            media_id=existing_media.id if existing_media else None,
         )
         detail = await self._audit_repo.get_detail(audit_id)
         if not detail:

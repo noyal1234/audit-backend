@@ -25,26 +25,23 @@ logger = get_logger(__name__)
 # ── Prompts ────────────────────────────────────────────────────────────────────
 
 _IMAGE_SYSTEM_PROMPT = """You are a dealership hygiene compliance auditor AI.
-Context is organized in a hierarchy: Level1 -> Subcategory -> Checkpoint.
-Your task is to evaluate ONLY the checkpoint: whether the submitted audit photo meets
-the required hygiene and presentation standard for that checkpoint.
-Use Level1 and Subcategory as contextual guidance only; do not evaluate at those levels.
+Hierarchy: Level1 -> Subcategory -> Checkpoint.
+Evaluate ONLY the checkpoint using the provided context.
 
 You will receive:
-- Level1 name and optional description
-- Subcategory name and optional description
-- Checkpoint name and checkpoint standard (description)
+- Level1
+- Subcategory
+- Checkpoint and its standard
 - Shift info
-- One or two images: if a reference/standard image is provided, it is Image 1;
-  the audit photo submitted by staff is always the last image.
+- One audit image
 
-Respond ONLY with valid JSON in this exact structure (no markdown, no extra text):
+Return ONLY valid JSON:
 {
   "compliant": true | false,
-  "compliance_score": <float between 0.0 and 100.0>,
-  "confidence": <float between 0.0 and 1.0>,
-  "observations": "<2-4 concise bullet points separated by newlines, each starting with '• '>",
-  "summary": "<one clear sentence verdict, 40 words or less>"
+  "compliance_score": 0.0-100.0,
+  "confidence": 0.0-1.0,
+  "observations": "• bullet\\n• bullet",
+  "summary": "One sentence verdict (max 70 words)"
 }"""
 
 
@@ -59,10 +56,8 @@ def _build_image_user_content(
     shift_date: str,
     audit_image_b64: str,
     audit_image_mime: str,
-    reference_image_b64: str | None,
-    reference_image_mime: str | None,
 ) -> list[dict]:
-    """Build the multimodal content list for the image analysis request. Reference image first (if present), audit image last."""
+    """Build the multimodal content list: text block + one audit image."""
     level1_block = f"Level1: {level1_name}"
     if level1_description:
         level1_block += f"\nLevel1 description: {level1_description}"
@@ -73,35 +68,22 @@ def _build_image_user_content(
     if checkpoint_description:
         cp_block += f"\nCheckpoint standard: {checkpoint_description}"
 
-    image_instruction = (
-        "Image 1 is the reference standard. Image 2 is the audit photo. Compare the audit photo against the reference.\n"
-        if reference_image_b64
-        else "No reference standard image available. Assess the audit photo independently.\n"
-    )
-
     text_block = {
         "type": "text",
         "text": (
             f"{level1_block}\n\n{sub_block}\n\n{cp_block}\n\n"
             f"Shift: {shift_type} on {shift_date}\n\n"
-            f"{image_instruction}"
+            "Evaluate the submitted audit image strictly against the checkpoint standard.\n"
         ),
     }
 
-    content: list[dict] = [text_block]
-
-    if reference_image_b64 and reference_image_mime:
-        content.append({
+    return [
+        text_block,
+        {
             "type": "image_url",
-            "image_url": {"url": f"data:{reference_image_mime};base64,{reference_image_b64}"},
-        })
-
-    content.append({
-        "type": "image_url",
-        "image_url": {"url": f"data:{audit_image_mime};base64,{audit_image_b64}"},
-    })
-
-    return content
+            "image_url": {"url": f"data:{audit_image_mime};base64,{audit_image_b64}"},
+        },
+    ]
 
 
 def _mime_from_path(path: str) -> str:
@@ -161,8 +143,6 @@ class AIService:
                 shift_date=shift_date,
                 audit_image_b64=audit_b64,
                 audit_image_mime=audit_mime,
-                reference_image_b64=None,
-                reference_image_mime=None,
             )
 
             response = await self._client.chat.completions.create(
@@ -171,8 +151,9 @@ class AIService:
                     {"role": "system", "content": _IMAGE_SYSTEM_PROMPT},
                     {"role": "user", "content": content},
                 ],
-                max_tokens=2048,
-                temperature=0.1,
+                max_tokens=800,
+                temperature=0.0,
+                response_format={"type": "json_object"},
             )
 
             raw_text = response.choices[0].message.content or ""
