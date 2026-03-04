@@ -21,6 +21,17 @@ class MediaRepository(BasePostgresRepository[MediaEvidenceSchema]):
         row = await self._get_by_id_raw(id)
         return self._schema_to_media(row) if row else None
 
+    async def get_by_audit_checkpoint_id(self, audit_checkpoint_id: str) -> MediaEvidenceResponse | None:
+        """Return the single media_evidence row for this audit_checkpoint_id, or None. Enforces one row per checkpoint."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(MediaEvidenceSchema).where(
+                    MediaEvidenceSchema.audit_checkpoint_id == audit_checkpoint_id
+                ).limit(1)
+            )
+            row = result.scalar_one_or_none()
+        return self._schema_to_media(row) if row else None
+
     async def create(
         self,
         audit_id: str,
@@ -38,6 +49,25 @@ class MediaRepository(BasePostgresRepository[MediaEvidenceSchema]):
             await session.commit()
             await session.refresh(row)
             return self._schema_to_media(row)
+
+    async def update_file_and_reset_ai(self, id: str, file_path: str) -> MediaEvidenceResponse | None:
+        """Update file_path and reset AI fields to PENDING/null. Does not change audit_id or audit_checkpoint_id."""
+        async with self._session_factory() as session:
+            result = await session.execute(select(MediaEvidenceSchema).where(MediaEvidenceSchema.id == id))
+            row = result.scalar_one_or_none()
+            if not row:
+                return None
+            row.file_path = file_path
+            row.ai_status = "PENDING"
+            row.ai_compliant = None
+            row.ai_confidence = None
+            row.ai_observations = None
+            row.ai_summary = None
+            row.ai_analyzed_at = None
+            row.ai_compliance_score = None
+            await session.commit()
+            await session.refresh(row)
+        return self._schema_to_media(row)
 
     async def list_by_audit(self, audit_id: str) -> list[MediaEvidenceResponse]:
         """Return all media for an audit, with checkpoint_name from snapshot."""

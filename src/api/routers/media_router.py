@@ -1,8 +1,9 @@
-"""Image upload, AI result retrieval, and admin delete endpoints."""
+"""Image upload, AI result retrieval, file download, and admin delete endpoints."""
 
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
+from fastapi.responses import FileResponse
 
 from src.api.dependencies import RequireEmployee, RequireStellantisAdmin
 from src.business_services.media_service import get_media_service
@@ -30,6 +31,20 @@ async def get_image_ai_result(
     if not row:
         raise NotFoundError("Image", id)
     return row
+
+
+@router.get("/images/{id}", response_class=FileResponse)
+async def get_image(
+    id: str,
+    payload: Annotated[dict, RequireEmployee],
+    media_service: Annotated[any, Depends(get_media_service)],
+):
+    """Get an evidence image by id. Returns the image file (same access rules as AI result)."""
+    result = await media_service.get_image_file(id, payload)
+    if not result:
+        raise NotFoundError("Image", id)
+    file_path, media_type = result
+    return FileResponse(path=file_path, media_type=media_type)
 
 
 @router.delete("/images/{id}", status_code=status.HTTP_204_NO_CONTENT)

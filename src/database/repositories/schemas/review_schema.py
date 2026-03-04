@@ -16,7 +16,19 @@ class AuditCheckpointReviewResponse(BaseModel):
     model_version: str | None
     created_by: str | None
     created_at: datetime
+    media_id: str | None = None
     model_config = {"from_attributes": True}
+
+
+class EffectiveReviewResponse(BaseModel):
+    """Effective (latest) review per checkpoint, as returned in audit detail. Backward compatible."""
+    review_id: str
+    review_type: str
+    media_id: str | None = None
+    compliant: bool | None = None
+    score: float | None = None
+    remarks: str | None = None
+    confidence: float | None = None
 
 
 class ManualReviewRequest(BaseModel):

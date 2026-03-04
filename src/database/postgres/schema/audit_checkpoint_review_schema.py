@@ -23,7 +23,17 @@ class AuditCheckpointReviewSchema(Base):
     model_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    media_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("media_evidence.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     audit_checkpoint: Mapped["AuditCheckpointSchema"] = relationship(
         "AuditCheckpointSchema", back_populates="reviews"
+    )
+    media: Mapped["MediaEvidenceSchema | None"] = relationship(
+        "MediaEvidenceSchema",
+        foreign_keys=[media_id],
+        lazy="joined",
     )

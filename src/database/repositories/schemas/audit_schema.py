@@ -4,7 +4,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
-from src.database.repositories.schemas.review_schema import AuditCheckpointReviewResponse
+from src.database.repositories.schemas.review_schema import EffectiveReviewResponse
 
 
 class AuditCreate(BaseModel):
@@ -52,7 +52,7 @@ class AuditCheckpointResponse(BaseModel):
     is_completed: bool
     created_at: datetime
     updated_at: datetime
-    effective_review: AuditCheckpointReviewResponse | None = None
+    effective_review: EffectiveReviewResponse | None = None
     model_config = {"from_attributes": True}
 
 

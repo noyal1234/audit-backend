@@ -23,7 +23,7 @@ from src.database.repositories.schemas.audit_schema import (
     AuditCheckpointResponse,
 )
 from src.database.repositories.schemas.area_schema import AreaWithChildrenResponse
-from src.database.repositories.schemas.review_schema import AuditCheckpointReviewResponse
+from src.database.repositories.schemas.review_schema import AuditCheckpointReviewResponse, EffectiveReviewResponse
 from src.database.repositories.base_repository import BasePostgresRepository
 from src.database.repositories.audit_checkpoint_review_repository import AuditCheckpointReviewRepository
 
@@ -52,6 +52,18 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
                 checkpoints_out = []
                 for cp in sa.checkpoints:
                     er = review_by_cp.get(cp.id)
+                    effective_review = (
+                        EffectiveReviewResponse(
+                            review_id=er.id,
+                            review_type=er.review_type,
+                            media_id=er.media_id,
+                            compliant=er.compliant,
+                            score=er.score,
+                            remarks=er.remarks,
+                            confidence=er.confidence,
+                        )
+                        if er else None
+                    )
                     checkpoints_out.append(AuditCheckpointResponse(
                         id=cp.id,
                         audit_sub_area_id=cp.audit_sub_area_id,
@@ -60,7 +72,7 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
                         is_completed=cp.is_completed,
                         created_at=cp.created_at,
                         updated_at=cp.updated_at,
-                        effective_review=er,
+                        effective_review=effective_review,
                     ))
                 sub_areas_out.append(AuditSubAreaResponse(
                     id=sa.id,
