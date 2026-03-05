@@ -118,9 +118,11 @@ class ShiftService(BaseBusinessService):
         self._require_initialized()
         if self._facility_repo is None:
             raise RuntimeError("ShiftService not initialized")
-        facility = await self._facility_repo.get_by_id(facility_id)
+        facility, is_active = await self._facility_repo.get_by_id_with_active(facility_id)
         if not facility:
             raise NotFoundError("Facility", facility_id)
+        if not is_active:
+            raise ConflictError("Facility is inactive")
         configs = await self._shift_repo.list_all()
         if not configs:
             raise ConflictError("Shift configuration missing. Contact system administrator.")

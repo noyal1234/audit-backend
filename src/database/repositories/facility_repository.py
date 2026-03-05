@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from src.database.postgres.schema.facility_schema import FacilitySchema
 from src.database.postgres.schema.zone_schema import ZoneSchema
 from src.database.repositories.base_repository import BasePostgresRepository
+from src.exceptions.domain_exceptions import ConflictError
 from src.database.repositories.schemas.dealer_schema import (
     CountryMini,
     FacilityCreate,
@@ -55,12 +56,27 @@ class FacilityRepository(BasePostgresRepository[FacilitySchema]):
                 .options(
                     selectinload(FacilitySchema.zone).selectinload(ZoneSchema.country),
                 )
-                .where(FacilitySchema.id == id)
+                .where(FacilitySchema.id == id, FacilitySchema.is_active.is_(True))
             )
             row = result.scalar_one_or_none()
             if row is None:
                 return None
             return self._row_to_facility_response(row)
+
+    async def get_by_id_with_active(self, id: str) -> tuple[FacilityResponse | None, bool]:
+        """Return (facility, is_active). Use when caller needs to distinguish inactive from not found."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(FacilitySchema)
+                .options(
+                    selectinload(FacilitySchema.zone).selectinload(ZoneSchema.country),
+                )
+                .where(FacilitySchema.id == id)
+            )
+            row = result.scalar_one_or_none()
+            if row is None:
+                return None, False
+            return self._row_to_facility_response(row), bool(row.is_active)
 
     async def list_facilities(
         self,
@@ -79,8 +95,9 @@ class FacilityRepository(BasePostgresRepository[FacilitySchema]):
                 .options(
                     selectinload(FacilitySchema.zone).selectinload(ZoneSchema.country),
                 )
+                .where(FacilitySchema.is_active.is_(True))
             )
-            count_q = select(func.count()).select_from(FacilitySchema)
+            count_q = select(func.count()).select_from(FacilitySchema).where(FacilitySchema.is_active.is_(True))
             if zone_id:
                 q = q.where(FacilitySchema.zone_id == zone_id)
                 count_q = count_q.where(FacilitySchema.zone_id == zone_id)
@@ -153,6 +170,8 @@ class FacilityRepository(BasePostgresRepository[FacilitySchema]):
             row = result.scalar_one_or_none()
             if not row:
                 return False
-            await session.delete(row)
+            if not row.is_active:
+                raise ConflictError("Facility already deleted")
+            row.is_active = False
             await session.commit()
             return True
