@@ -14,6 +14,7 @@ from src.database.repositories.schemas.audit_schema import (
     AuditCreate,
     AuditDetailResponse,
     AuditProgressResponse,
+    AuditQualityScoreResponse,
     AuditResponse,
     CheckpointCompleteRequest,
 )
@@ -103,7 +104,7 @@ class AuditService(BaseBusinessService):
         await self._ensure_facility_in_country(facility_id, payload)
 
         shift_svc = get_shift_service()
-        current = await shift_svc.get_current_shift()
+        current = await shift_svc.get_current_shift(facility_id)
         if not current:
             raise ConflictError("No shift config or current shift not determined")
         if not current.is_current:
@@ -188,6 +189,19 @@ class AuditService(BaseBusinessService):
         if not progress:
             raise NotFoundError("Audit", audit_id)
         return progress
+
+    async def get_quality_score(self, audit_id: str, payload: dict) -> AuditQualityScoreResponse:
+        """Average compliance score from effective reviews. Checkpoints without a review are excluded."""
+        self._require_initialized()
+        audit = await self._audit_repo.get_by_id(audit_id)
+        if not audit:
+            raise NotFoundError("Audit", audit_id)
+        require_facility_access(audit.facility_id, payload)
+        await self._ensure_facility_in_country(audit.facility_id, payload)
+        result = await self._audit_repo.get_quality_score(audit_id)
+        if result is None:
+            raise NotFoundError("Audit", audit_id)
+        return result
 
     # --- Auto status: COMPLETED when all checkpoints done; IN_PROGRESS when not ---
 

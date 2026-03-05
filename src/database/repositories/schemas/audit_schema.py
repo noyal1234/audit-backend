@@ -83,6 +83,15 @@ class AuditProgressResponse(BaseModel):
     completion_percentage: float
     compliant_checkpoints: int = 0
     compliance_percentage: float = 0.0
+    reviewed_checkpoints: int = 0
+    average_score: float = 0.0
+
+
+class AuditQualityScoreResponse(BaseModel):
+    """Average compliance score from effective reviews. Checkpoints without a review are excluded."""
+    audit_id: str
+    reviewed_checkpoints: int
+    average_score: float
 
 
 AuditAreaResponse.model_rebuild()

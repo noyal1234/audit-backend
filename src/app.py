@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from src.configs.settings import get_settings
 
-from src.api.routers import admin_router, audit_router, auth_router, company_router, country_router, dashboard_router, dealer_router, health_router, media_router, search_router, shift_router, staff_router, template_router, users_router
+from src.api.routers import admin_router, audit_router, auth_router, company_router, country_router, dashboard_router, dealer_router, health_router, media_router, search_router, shift_router, staff_router, template_router, timezone_router, users_router
 from src.di.container import configure_container, get_container
 from fastapi.exceptions import RequestValidationError
 
@@ -99,4 +99,5 @@ app.include_router(dashboard_router.router)
 app.include_router(search_router.router)
 app.include_router(users_router.router)
 app.include_router(media_router.router)
+app.include_router(timezone_router.router)
 app.include_router(health_router.router)

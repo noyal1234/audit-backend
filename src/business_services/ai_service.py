@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from pathlib import Path
 
 from openai import AsyncOpenAI
@@ -41,7 +42,7 @@ Return ONLY valid JSON:
   "compliance_score": 0.0-100.0,
   "confidence": 0.0-1.0,
   "observations": "• bullet\\n• bullet",
-  "summary": "One sentence verdict (max 70 words)"
+  "summary": "One sentence verdict (max 50 words)"
 }"""
 
 
@@ -84,6 +85,28 @@ def _build_image_user_content(
             "image_url": {"url": f"data:{audit_image_mime};base64,{audit_image_b64}"},
         },
     ]
+
+
+def _extract_json(raw_text: str) -> dict | None:
+    """Extract and parse JSON from model output. Handles markdown code fences and surrounding text."""
+    text = (raw_text or "").strip()
+    if not text:
+        return None
+    # Remove markdown code block if present (```json ... ``` or ``` ... ```)
+    code_block = re.search(r"^```(?:json)?\s*\n?(.*?)\n?```\s*$", text, re.DOTALL)
+    if code_block:
+        text = code_block.group(1).strip()
+    # Otherwise try to find the first { ... last } substring
+    if not text.startswith("{"):
+        start = text.find("{")
+        if start >= 0:
+            end = text.rfind("}")
+            if end > start:
+                text = text[start : end + 1]
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
 
 
 def _mime_from_path(path: str) -> str:
@@ -157,7 +180,10 @@ class AIService:
             )
 
             raw_text = response.choices[0].message.content or ""
-            parsed = json.loads(raw_text)
+            parsed = _extract_json(raw_text)
+            if parsed is None:
+                logger.warning("[AI] JSON parse error in image analysis: could not extract valid JSON from response (len=%d)", len(raw_text))
+                return AIAnalysisResult(status="FAILED", analyzed_at=utc_now())
 
             try:
                 compliance_score = float(parsed.get("compliance_score", 0.0))
@@ -182,7 +208,7 @@ class AIService:
             )
 
         except json.JSONDecodeError as exc:
-            logger.warning("[AI] JSON parse error in image analysis: %s", exc)
+            logger.warning("[AI] JSON parse error in image analysis (after extract): %s", exc)
             return AIAnalysisResult(status="FAILED", analyzed_at=utc_now())
         except Exception as exc:  # noqa: BLE001
             logger.error("[AI] Image analysis failed: %s", exc)

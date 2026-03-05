@@ -56,6 +56,7 @@ class FacilityResponse(BaseModel):
     dealer_phone: str | None
     dealer_email: str | None
     dealer_designation: str | None
+    timezone: str = "Asia/Kolkata"
     created_at: datetime
     updated_at: datetime
 

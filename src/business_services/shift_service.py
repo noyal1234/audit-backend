@@ -1,6 +1,7 @@
 """Shift config: 2-shift 24h coverage (DAY + NIGHT), validation, current shift detection."""
 
 from datetime import time
+from zoneinfo import ZoneInfo
 
 from src.database.repositories.schemas.shift_schema import (
     CurrentShiftResponse,
@@ -9,9 +10,10 @@ from src.database.repositories.schemas.shift_schema import (
     ShiftConfigUpdate,
 )
 from src.database.repositories.shift_repository import ShiftRepository
+from src.database.repositories.facility_repository import FacilityRepository
 from src.business_services.base import BaseBusinessService
 from src.exceptions.domain_exceptions import ConflictError, NotFoundError, ValidationError
-from src.utils.datetime_utils import today_utc, time_in_shift, utc_now
+from src.utils.datetime_utils import time_in_shift, utc_now
 
 DEFAULT_SHIFTS = [
     ShiftConfigCreate(name="DAY", start_time=time(6, 0), end_time=time(18, 0)),
@@ -52,15 +54,18 @@ class ShiftService(BaseBusinessService):
     def __init__(self) -> None:
         super().__init__()
         self._shift_repo: ShiftRepository | None = None
+        self._facility_repo: FacilityRepository | None = None
 
     def _initialize_service(self) -> None:
         from src.di.container import get_container
         factory = get_container().get_postgres_service().get_session_factory()
         self._shift_repo = ShiftRepository(factory)
+        self._facility_repo = FacilityRepository(factory)
         self.logger.info("[OK] ShiftService initialized")
 
     def _close_service(self) -> None:
         self._shift_repo = None
+        self._facility_repo = None
 
     def _require_initialized(self) -> None:
         if self._shift_repo is None:
@@ -108,18 +113,27 @@ class ShiftService(BaseBusinessService):
 
     # ---- Current Shift ----
 
-    async def get_current_shift(self) -> CurrentShiftResponse:
+    async def get_current_shift(self, facility_id: str) -> CurrentShiftResponse:
+        """Current active shift in facility's timezone. facility_id is required."""
         self._require_initialized()
+        if self._facility_repo is None:
+            raise RuntimeError("ShiftService not initialized")
+        facility = await self._facility_repo.get_by_id(facility_id)
+        if not facility:
+            raise NotFoundError("Facility", facility_id)
         configs = await self._shift_repo.list_all()
         if not configs:
             raise ConflictError("Shift configuration missing. Contact system administrator.")
-        now = utc_now()
-        today = today_utc().isoformat()
+
+        now_utc = utc_now()
+        facility_tz = ZoneInfo(facility.timezone)
+        local_now = now_utc.astimezone(facility_tz)
+        shift_date = local_now.date().isoformat()
         for cfg in configs:
-            if time_in_shift(cfg.start_time, cfg.end_time, now):
+            if time_in_shift(cfg.start_time, cfg.end_time, local_now):
                 return CurrentShiftResponse(
                     shift_type=cfg.name,
-                    shift_date=today,
+                    shift_date=shift_date,
                     start_time=cfg.start_time,
                     end_time=cfg.end_time,
                     is_current=True,
