@@ -43,6 +43,7 @@ class FacilityRepository(BasePostgresRepository[FacilitySchema]):
             dealer_phone=row.dealer_phone,
             dealer_email=row.dealer_email,
             dealer_designation=row.dealer_designation,
+            timezone=getattr(row, "timezone", "Asia/Kolkata"),
             created_at=row.created_at,
             updated_at=row.updated_at,
         )

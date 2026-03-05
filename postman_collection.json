@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Dealer Hygiene Compliance Backend",
-    "description": "Complete API collection for the Dealer Hygiene Compliance Backend.\n\nSetup:\n1. Run 'POST /auth/login' with Super Admin or Dealership credentials first.\n2. The access_token is auto-saved to the collection variable.\n3. All subsequent requests use it via Bearer auth.\n\nHierarchy: Country -> Zone -> Facility (Dealership) -> Areas -> Sub-Areas -> Checkpoints (facility-scoped).\n\nAudits: snapshot per shift (areas -> sub_areas -> checkpoints). Checkpoint completion (is_completed), manual review (PATCH review), AI review (insert on image analysis). Effective review = latest per checkpoint.",
+    "description": "Complete API collection for the Dealer Hygiene Compliance Backend.\n\nSetup:\n1. Run 'POST /auth/login' with Super Admin or Dealership credentials first.\n2. The access_token is auto-saved to the collection variable.\n3. All subsequent requests use it via Bearer auth.\n\nHierarchy: Country -> Zone -> Facility (Dealership) -> Areas -> Sub-Areas -> Checkpoints (facility-scoped).\n\nAudits: snapshot per shift (areas -> sub_areas -> checkpoints). Checkpoint completion (is_completed), manual review (PATCH review), AI review (insert on image analysis, linked via media_id). Effective review = latest per checkpoint; includes review_id, media_id, compliant, score, remarks, confidence. Media AI: ai_status (PENDING|COMPLETED|FAILED), ai_compliance_score (0-100), ai_confidence, ai_observations, ai_summary.\n\nShifts: GET /shifts/current requires facility_id (facility-scoped users); shift detection uses facility.timezone. GET /timezones returns regional timezone list (id, label) for UI.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -834,8 +834,8 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{baseUrl}}/shifts/current", "host": ["{{baseUrl}}"], "path": ["shifts", "current"] },
-            "auth": { "type": "noauth" }
+            "description": "Current active shift for the user's facility. Uses facility timezone (facility.timezone). Requires facility-scoped user (EMPLOYEE or DEALERSHIP with facility_id in token). Returns 409 if user has no facility_id. Response: shift_type, shift_date, start_time, end_time, is_current. Use Dealership or Employee login first.",
+            "url": { "raw": "{{baseUrl}}/shifts/current", "host": ["{{baseUrl}}"], "path": ["shifts", "current"] }
           }
         },
         {
@@ -872,6 +872,29 @@
               ]
             }
           }
+        }
+      ]
+    },
+    {
+      "name": "Timezones",
+      "item": [
+        {
+          "name": "List Timezones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Valid regional timezones (e.g. Asia/Kolkata, Europe/London). From zoneinfo; no auth. Use for facility timezone selection. Response: [{ \"id\": \"Asia/Kolkata\", \"label\": \"Asia/Kolkata\" }, ...].",
+            "url": { "raw": "{{baseUrl}}/timezones", "host": ["{{baseUrl}}"], "path": ["timezones"] },
+            "auth": { "type": "noauth" }
+          },
+          "response": [
+            {
+              "name": "Example",
+              "status": "OK",
+              "code": 200,
+              "body": "[\n  { \"id\": \"Africa/Cairo\", \"label\": \"Africa/Cairo\" },\n  { \"id\": \"Asia/Kolkata\", \"label\": \"Asia/Kolkata\" },\n  { \"id\": \"Europe/London\", \"label\": \"Europe/London\" }\n]"
+            }
+          ]
         }
       ]
     },
@@ -937,8 +960,18 @@
           "request": {
             "method": "GET",
             "header": [],
-            "description": "Returns total_checkpoints, completed_checkpoints, completion_percentage, compliant_checkpoints, compliance_percentage.",
+            "description": "Returns total_checkpoints, completed_checkpoints, completion_percentage, compliant_checkpoints, compliance_percentage, reviewed_checkpoints, average_score (quality score).",
             "url": { "raw": "{{baseUrl}}/audits/{{auditId}}/progress", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}", "progress"] }
+          }
+        },
+        {
+          "name": "Get Audit Quality Score",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Returns average compliance score from effective reviews. Checkpoints without a review are excluded.",
+            "url": { "raw": "{{baseUrl}}/audits/{{auditId}}/quality-score", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}", "quality-score"] },
+            "response": [{ "name": "Example", "status": "OK", "code": 200, "body": "{\n  \"audit_id\": \"abc123\",\n  \"reviewed_checkpoints\": 18,\n  \"average_score\": 82.35\n}" }]
           }
         },
         {
@@ -1007,26 +1040,42 @@
                 { "key": "file", "type": "file", "src": "", "description": "Select an image (JPEG/PNG) for this checkpoint" }
               ]
             },
-            "description": "Upload evidence image for audit checkpoint. AI analysis runs in background and inserts an AI review when done.",
+            "description": "Upload evidence image for audit checkpoint. Triggers background AI analysis (LiteLLM vision). When AI completes, media row is updated (ai_status, ai_compliant, ai_compliance_score, ai_confidence, ai_observations, ai_summary, ai_analyzed_at) and an AI review is inserted into audit_checkpoint_review (linked via media_id). Response: MediaEvidenceResponse with id, audit_id, audit_checkpoint_id, file_path, created_at, checkpoint_name, ai_status (PENDING|COMPLETED|FAILED), ai_compliant, ai_confidence, ai_observations, ai_summary, ai_analyzed_at, ai_compliance_score.",
             "url": {
               "raw": "{{baseUrl}}/audits/{{auditId}}/checkpoints/{{auditCheckpointId}}/image",
               "host": ["{{baseUrl}}"],
               "path": ["audits", "{{auditId}}", "checkpoints", "{{auditCheckpointId}}", "image"]
             }
-          }
+          },
+          "response": [
+            {
+              "name": "Example",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"id\": \"\",\n  \"audit_id\": \"\",\n  \"audit_checkpoint_id\": \"\",\n  \"file_path\": \"\",\n  \"created_at\": \"\",\n  \"checkpoint_name\": \"\",\n  \"ai_status\": \"PENDING\",\n  \"ai_compliant\": null,\n  \"ai_confidence\": null,\n  \"ai_observations\": null,\n  \"ai_summary\": null,\n  \"ai_analyzed_at\": null,\n  \"ai_compliance_score\": null\n}"
+            }
+          ]
         },
         {
           "name": "List Audit Images",
           "request": {
             "method": "GET",
             "header": [],
-            "description": "List all evidence images for the audit (audit_checkpoint_id, checkpoint_name, ai_status, etc.).",
+            "description": "List all evidence images for the audit. Each item: id, audit_id, audit_checkpoint_id, file_path, created_at, checkpoint_name, ai_status (PENDING|COMPLETED|FAILED), ai_compliant, ai_confidence, ai_observations, ai_summary, ai_analyzed_at, ai_compliance_score (0.0-100.0).",
             "url": {
               "raw": "{{baseUrl}}/audits/{{auditId}}/images",
               "host": ["{{baseUrl}}"],
               "path": ["audits", "{{auditId}}", "images"]
             }
-          }
+          },
+          "response": [
+            {
+              "name": "Example",
+              "status": "OK",
+              "code": 200,
+              "body": "[\n  {\n    \"id\": \"\",\n    \"audit_id\": \"\",\n    \"audit_checkpoint_id\": \"\",\n    \"file_path\": \"\",\n    \"created_at\": \"\",\n    \"checkpoint_name\": \"\",\n    \"ai_status\": \"PENDING\",\n    \"ai_compliant\": null,\n    \"ai_confidence\": null,\n    \"ai_observations\": null,\n    \"ai_summary\": null,\n    \"ai_analyzed_at\": null,\n    \"ai_compliance_score\": null\n  }\n]"
+            }
+          ]
         },
         {
           "name": "Finalize Audit (DEALERSHIP+)",
@@ -1065,8 +1114,17 @@
           "request": {
             "method": "GET",
             "header": [],
+            "description": "Full AI-generated compliance report. Uses effective review (latest per checkpoint) for executive summary. Response: audit_id, facility_id, facility_name, shift_type, shift_date, overall_compliance_percent, ai_images_analyzed, ai_compliant_count, executive_summary, sections (title, content), generated_at. DEALERSHIP+.",
             "url": { "raw": "{{baseUrl}}/audits/{{auditId}}/report", "host": ["{{baseUrl}}"], "path": ["audits", "{{auditId}}", "report"] }
-          }
+          },
+          "response": [
+            {
+              "name": "Example",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"audit_id\": \"\",\n  \"facility_id\": \"\",\n  \"facility_name\": null,\n  \"shift_type\": \"DAY\",\n  \"shift_date\": \"\",\n  \"overall_compliance_percent\": 0.0,\n  \"ai_images_analyzed\": 0,\n  \"ai_compliant_count\": 0,\n  \"executive_summary\": \"\",\n  \"sections\": [\n    { \"title\": \"\", \"content\": \"\" }\n  ],\n  \"generated_at\": \"\"\n}"
+            }
+          ]
         }
       ]
     },
@@ -1305,9 +1363,23 @@
           "request": {
             "method": "GET",
             "header": [],
-            "description": "Returns AI analysis for the image: ai_status (PENDING|COMPLETED|FAILED), ai_compliant, ai_compliance_score (0.0-100.0), ai_confidence, ai_observations, ai_summary, ai_analyzed_at.",
+            "description": "Returns full media row with AI analysis: id, audit_id, audit_checkpoint_id, file_path, created_at, checkpoint_name; ai_status (PENDING|COMPLETED|FAILED), ai_compliant, ai_compliance_score (0.0-100.0), ai_confidence (0.0-1.0), ai_observations, ai_summary, ai_analyzed_at. Same as upload/list response shape.",
             "url": { "raw": "{{baseUrl}}/images/{{imageId}}/ai-result", "host": ["{{baseUrl}}"], "path": ["images", "{{imageId}}", "ai-result"] }
-          }
+          },
+          "response": [
+            {
+              "name": "Example (COMPLETED)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"id\": \"{{imageId}}\",\n  \"audit_id\": \"\",\n  \"audit_checkpoint_id\": \"\",\n  \"file_path\": \"\",\n  \"created_at\": \"\",\n  \"checkpoint_name\": \"\",\n  \"ai_status\": \"COMPLETED\",\n  \"ai_compliant\": false,\n  \"ai_confidence\": 0.85,\n  \"ai_observations\": \"• Finding 1\\n• Finding 2\",\n  \"ai_summary\": \"One sentence verdict.\",\n  \"ai_analyzed_at\": \"\",\n  \"ai_compliance_score\": 42.0\n}"
+            },
+            {
+              "name": "Example (PENDING)",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"id\": \"{{imageId}}\",\n  \"audit_id\": \"\",\n  \"audit_checkpoint_id\": \"\",\n  \"file_path\": \"\",\n  \"created_at\": \"\",\n  \"checkpoint_name\": \"\",\n  \"ai_status\": \"PENDING\",\n  \"ai_compliant\": null,\n  \"ai_confidence\": null,\n  \"ai_observations\": null,\n  \"ai_summary\": null,\n  \"ai_analyzed_at\": null,\n  \"ai_compliance_score\": null\n}"
+            }
+          ]
         },
         {
           "name": "Get Image by ID",

@@ -9,7 +9,7 @@ from src.api.dependencies import RequireDealership, RequireEmployee
 from src.business_services.audit_service import get_audit_service
 from src.business_services.media_service import get_media_service
 from src.business_services.report_service import get_report_service
-from src.database.repositories.schemas.audit_schema import CheckpointCompleteRequest
+from src.database.repositories.schemas.audit_schema import AuditQualityScoreResponse, CheckpointCompleteRequest
 from src.database.repositories.schemas.review_schema import ManualReviewRequest
 from src.exceptions.domain_exceptions import NotFoundError
 from src.utils.pagination import PaginationParams
@@ -65,6 +65,16 @@ async def get_audit_progress(
 ):
     """Get audit progress: checkpoint completion and compliance (effective review)."""
     return await audit_service.get_progress(audit_id, payload)
+
+
+@router.get("/{audit_id}/quality-score", response_model=AuditQualityScoreResponse)
+async def get_audit_quality_score(
+    audit_id: str,
+    payload: Annotated[dict, RequireEmployee],
+    audit_service: Annotated[any, Depends(get_audit_service)],
+):
+    """Get average compliance score from effective reviews. Checkpoints without a review are excluded."""
+    return await audit_service.get_quality_score(audit_id, payload)
 
 
 @router.post("/{audit_id}/checkpoints/{checkpoint_id}/complete")

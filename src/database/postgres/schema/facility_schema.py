@@ -19,6 +19,7 @@ class FacilitySchema(Base):
     dealer_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     dealer_email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     dealer_designation: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="Asia/Kolkata")
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

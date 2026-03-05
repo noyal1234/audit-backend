@@ -7,16 +7,21 @@ from fastapi import APIRouter, Depends, status
 from src.api.dependencies import RequireEmployee, RequireSuperAdmin
 from src.business_services.shift_service import get_shift_service
 from src.database.repositories.schemas.shift_schema import ShiftConfigUpdate
+from src.exceptions.domain_exceptions import ConflictError
 
 router = APIRouter(prefix="/shifts", tags=["shifts"])
 
 
 @router.get("/current")
 async def get_current_shift(
+    payload: Annotated[dict, RequireEmployee],
     shift_service: Annotated[any, Depends(get_shift_service)],
 ):
-    """Get current active shift."""
-    return await shift_service.get_current_shift()
+    """Get current active shift for the user's facility. Uses facility timezone. Facility-scoped users only."""
+    facility_id = payload.get("facility_id")
+    if not facility_id:
+        raise ConflictError("Only facility-scoped users can get current shift")
+    return await shift_service.get_current_shift(facility_id)
 
 
 @router.get("/config")

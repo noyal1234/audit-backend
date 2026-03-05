@@ -17,6 +17,7 @@ from src.database.repositories.schemas.audit_schema import (
     AuditCreate,
     AuditDetailResponse,
     AuditProgressResponse,
+    AuditQualityScoreResponse,
     AuditResponse,
     AuditAreaResponse,
     AuditSubAreaResponse,
@@ -274,12 +275,17 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
                         completed += 1
         pct = (completed / total * 100.0) if total > 0 else 0.0
         compliant_count = 0
+        scores: list[float] = []
         for aa in detail.audit_areas:
             for sa in aa.sub_areas:
                 for cp in sa.checkpoints:
                     if cp.effective_review and cp.effective_review.compliant:
                         compliant_count += 1
+                    if cp.effective_review is not None and cp.effective_review.score is not None:
+                        scores.append(cp.effective_review.score)
         compliance_pct = (compliant_count / total * 100.0) if total > 0 else 0.0
+        reviewed = len(scores)
+        average_score = round(sum(scores) / reviewed, 2) if reviewed > 0 else 0.0
         return AuditProgressResponse(
             audit_id=id,
             status_type=detail.status_type,
@@ -288,6 +294,27 @@ class AuditRepository(BasePostgresRepository[AuditSchema]):
             completion_percentage=round(pct, 2),
             compliant_checkpoints=compliant_count,
             compliance_percentage=round(compliance_pct, 2),
+            reviewed_checkpoints=reviewed,
+            average_score=average_score,
+        )
+
+    async def get_quality_score(self, audit_id: str) -> AuditQualityScoreResponse | None:
+        """Average score from effective reviews. Checkpoints without a review are excluded."""
+        detail = await self.get_detail(audit_id)
+        if not detail:
+            return None
+        scores: list[float] = []
+        for aa in detail.audit_areas:
+            for sa in aa.sub_areas:
+                for cp in sa.checkpoints:
+                    if cp.effective_review is not None and cp.effective_review.score is not None:
+                        scores.append(cp.effective_review.score)
+        reviewed = len(scores)
+        average_score = round(sum(scores) / reviewed, 2) if reviewed > 0 else 0.0
+        return AuditQualityScoreResponse(
+            audit_id=audit_id,
+            reviewed_checkpoints=reviewed,
+            average_score=average_score,
         )
 
     async def get_checkpoint_by_id(self, checkpoint_id: str, audit_id: str) -> AuditCheckpointSchema | None:
